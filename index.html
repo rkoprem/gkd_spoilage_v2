@@ -740,11 +740,16 @@ function normalizeRows(rows) {
     const dateRaw = findVal(row, keyMap.DATE);
     let dt = null;
     if (dateRaw) {
-      if (!isNaN(dateRaw) && +dateRaw > 40000) {
+      const dateStr = String(dateRaw).trim();
+      // ISO datetime with T (e.g. from Google Sheets: 2026-07-03T18:30:00.000Z)
+      if (/^\d{4}-\d{2}-\d{2}T/.test(dateStr)) {
+        dt = parseDate(dateStr);
+      } else if (!isNaN(dateRaw) && +dateRaw > 40000) {
+        // Excel serial number
         dt = new Date((+dateRaw - 25569) * 86400 * 1000);
         dt = new Date(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate());
       } else {
-        dt = parseDate(String(dateRaw));
+        dt = parseDate(dateStr);
       }
     }
     const qty = parseFloat(findVal(row, keyMap.QTY)) || 0;
@@ -1548,7 +1553,10 @@ async function pullFromSheets() {
       LINE: r['LINE'], SHIFT: r['SHIFT'], SUPERVISOR: r['SUPERVISOR'],
       TYPE: r['TYPE'], CTYPE: r['CENTRE TYPE'], QTY: parseFloat(r['QTY'])||0,
       _dt: parseDate(String(r['DATE'])), _row: r._row
-    })).filter(r => r._dt && !isNaN(r._dt) && r.QTY > 0);
+    })).filter(r => r._dt && !isNaN(r._dt) && r.QTY > 0).map(r => ({
+      ...r,
+      DATE: fmtDate(r._dt)  // Always dd-mm-yyyy — fix ISO / raw string from Sheets
+    }));
 
     const existing = new Set(DATA.map(r=>r.DATE+'-'+r.CANNO+'-'+r.QTY));
     const newRecs = sheetRecords.filter(r=>!existing.has(r.DATE+'-'+r.CANNO+'-'+r.QTY));
