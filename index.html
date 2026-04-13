@@ -622,13 +622,18 @@ function loadFromStorage() {
 // ===== PARSE DATE =====
 function parseDate(str) {
   if (!str) return null;
+  str = String(str).trim();
   // dd-mm-yyyy
   if (/^\d{2}-\d{2}-\d{4}$/.test(str)) {
     const [d,m,y] = str.split('-');
-    return new Date(+y,+m-1,+d);
+    const dt = new Date(+y,+m-1,+d);
+    return isNaN(dt) ? null : dt;
   }
-  // yyyy-mm-dd
-  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return new Date(str);
+  // yyyy-mm-dd (use local, not UTC — mobile fix)
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const parts = str.substring(0,10).split('-');
+    return new Date(+parts[0], +parts[1]-1, +parts[2]);
+  }
   // Excel serial
   if (!isNaN(str)) {
     const d = new Date((+str - 25569) * 86400 * 1000);
@@ -645,6 +650,7 @@ function fmtDate(dt) {
 }
 
 function monthKey(dt) {
+  if (!dt || isNaN(dt)) return null;
   return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
 }
 
@@ -829,7 +835,7 @@ function buildDashboard() {
   }
 
   const total = DATA.reduce((a,r)=>a+r.QTY,0);
-  const byDay = groupBy(DATA, r => r.DATE);
+  const byDay = groupBy(DATA.filter(r=>r._dt&&!isNaN(r._dt)), r => r.DATE);
   const days = Object.values(byDay);
   const avgDay = days.reduce((a,d)=>a+d.reduce((x,r)=>x+r.QTY,0),0) / days.length;
   const maxDay = Math.max(...days.map(d=>d.reduce((x,r)=>x+r.QTY,0)));
@@ -884,7 +890,11 @@ function buildDashboard() {
 // ===== MONTH REPORT =====
 function buildMonthChips() {
   if (!DATA.length) return;
-  const months = [...new Set(DATA.map(r=>monthKey(r._dt)))].sort().reverse();
+  // Only months that have actual data records — filter null/invalid
+  const months = [...new Set(
+    DATA.map(r => monthKey(r._dt)).filter(m => m !== null)
+  )].sort().reverse();
+  if (!months.length) return;
   if (!activeMonth || !months.includes(activeMonth)) activeMonth = months[0];
 
   document.getElementById('month-chips').innerHTML = months.map(m=>`
@@ -900,7 +910,7 @@ function selectMonth(m) {
 }
 
 function renderMonthReport(mkey) {
-  const mData = DATA.filter(r=>monthKey(r._dt)===mkey);
+  const mData = DATA.filter(r=>r._dt&&!isNaN(r._dt)&&monthKey(r._dt)===mkey);
   if (!mData.length) return;
 
   const total = mData.reduce((a,r)=>a+r.QTY,0);
@@ -1049,7 +1059,7 @@ function buildPredict() {
   });
 
   // Monthly trend chart
-  const monthMap = groupBy(DATA, r=>monthKey(r._dt));
+  const monthMap = groupBy(DATA.filter(r=>r._dt&&!isNaN(r._dt)&&monthKey(r._dt)), r=>monthKey(r._dt));
   const monthEntries = Object.entries(monthMap)
     .map(([m,rs])=>({m, qty:rs.reduce((a,r)=>a+r.QTY,0)}))
     .sort((a,b)=>a.m.localeCompare(b.m));
@@ -1378,28 +1388,80 @@ const GS_SYNC_KEY = 'gkd_last_sync';
 let sheetsUrl = '';
 let isSyncing = false;
 
+// Use JSONP-style via script tag to bypass CORS (GET requests)
+function gsGet(action) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'gkdcb_' + Date.now();
+    const url = sheetsUrl + '?action=' + action + '&cb=' + cbName;
+    const script = document.createElement('script');
+    const timeout = setTimeout(() => {
+      cleanup();
+      // Fallback: try plain fetch (works if CORS header present)
+      fetch(sheetsUrl + '?action=' + action)
+        .then(r => r.json())
+        .then(resolve)
+        .catch(reject);
+    }, 5000);
+    function cleanup() { clearTimeout(timeout); if (script.parentNode) script.parentNode.removeChild(script); delete window[cbName]; }
+    window[cbName] = data => { cleanup(); resolve(data); };
+    script.onerror = () => { cleanup(); reject(new Error('Script load failed')); };
+    script.src = url;
+    document.head.appendChild(script);
+  });
+}
+
+// POST via fetch with no-cors fallback pattern
+function gsPost(body) {
+  return fetch(sheetsUrl, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'text/plain' } // text/plain avoids preflight
+  }).then(r => r.json());
+}
+
 function connectSheets() {
   const url = document.getElementById('sheet-url-inp').value.trim();
   if (!url.includes('script.google.com')) {
-    document.getElementById('connect-status').innerHTML = '<span style="color:#e53e3e">⚠️ Valid Apps Script URL இல்ல. script.google.com/macros/s/.../exec format-ல இருக்கணும்.</span>';
+    setConnectStatus('error', '⚠️ Valid Apps Script URL இல்ல. exec-ல end ஆகணும்.');
     return;
   }
-  document.getElementById('connect-status').innerHTML = '<span style="color:#dd6b20">🔄 Testing connection...</span>';
-  
-  fetch(url + '?action=getAll')
+  sheetsUrl = url;
+  setConnectStatus('loading', '🔄 Testing connection...');
+
+  fetch(url + '?action=ping')
     .then(r => r.json())
     .then(data => {
       if (data.error) throw new Error(data.error);
-      sheetsUrl = url;
       localStorage.setItem(GS_URL_KEY, url);
-      document.getElementById('connect-status').innerHTML = '<span style="color:#38a169">✅ Connected! Sheet-ல ' + (data.count||0) + ' records இருக்கு.</span>';
+      setConnectStatus('ok', '✅ Connected! Script is alive.');
       showSheetsConnected();
-      updateSyncCounts(data.count || 0);
       addSyncLog('✅ Connected to Google Sheets');
+      // Get count
+      fetch(url + '?action=getAll').then(r=>r.json()).then(d=>updateSyncCounts(d.count||0)).catch(()=>{});
     })
     .catch(err => {
-      document.getElementById('connect-status').innerHTML = '<span style="color:#e53e3e">❌ Connection failed: ' + err.message + '. CORS error இருந்தா Deploy settings check பண்ணுங்க (Anyone access).</span>';
+      setConnectStatus('error', '❌ Failed: ' + err.message);
+      tryConnectHelp(err.message);
     });
+}
+
+function tryConnectHelp(msg) {
+  const help = document.getElementById('connect-status');
+  if (msg.includes('fetch') || msg.includes('CORS') || msg.includes('Failed')) {
+    help.innerHTML += '<br><br><strong>🔧 Fix steps:</strong><ol style="margin:8px 0 0 16px;font-size:12px;line-height:1.8;">' +
+      '<li>Apps Script → Deploy → <strong>Manage deployments</strong></li>' +
+      '<li>✏️ Edit → Who has access: <strong>Anyone</strong> (not "Anyone with link")</li>' +
+      '<li><strong>New version</strong> select → Deploy</li>' +
+      '<li>புது URL copy பண்ணுங்க (பழையது use பண்ணாதீங்க)</li>' +
+      '<li>Browser-ல URL + <code>?action=ping</code> try பண்ணுங்க — JSON வரணும்</li>' +
+      '</ol>';
+  }
+}
+
+function setConnectStatus(type, msg) {
+  const el = document.getElementById('connect-status');
+  const colors = { ok:'#276749', error:'#c53030', loading:'#744210' };
+  el.innerHTML = '<span style="color:' + (colors[type]||'#4a5568') + '">' + msg + '</span>';
 }
 
 function showSheetsConnected() {
@@ -1419,14 +1481,8 @@ function setSyncStatus(state, msg) {
   document.getElementById('sync-bar-text').textContent = msg;
 }
 
-function updateLocalCount() {
-  document.getElementById('local-count').textContent = DATA.length;
-}
-
-function updateSyncCounts(sheetCount) {
-  document.getElementById('sheet-count').textContent = sheetCount;
-  updateLocalCount();
-}
+function updateLocalCount() { document.getElementById('local-count').textContent = DATA.length; }
+function updateSyncCounts(sheetCount) { document.getElementById('sheet-count').textContent = sheetCount; updateLocalCount(); }
 
 function addSyncLog(msg) {
   const log = document.getElementById('sync-log');
@@ -1436,65 +1492,60 @@ function addSyncLog(msg) {
 }
 
 async function pushToSheets() {
-  if (!sheetsUrl) { showToast('⚠️ Sheets connect பண்ணுங்க!', '#e53e3e'); return; }
-  if (!DATA.length) { showToast('⚠️ No local data!', '#e53e3e'); return; }
+  if (!sheetsUrl) { showToast('⚠️ Sheets connect பண்ணுங்க!','#e53e3e'); return; }
+  if (!DATA.length) { showToast('⚠️ No local data!','#e53e3e'); return; }
   if (isSyncing) return;
   isSyncing = true;
   setSyncStatus('syncing', '⬆️ Pushing to Sheets...');
   document.getElementById('sync-btn').disabled = true;
 
   const records = DATA.map(r => ({
-    'DATE': r.DATE, 'CAN NO': r.CANNO, 'CENTRE NAME': r.CENTRE,
-    'LINE': r.LINE, 'SHIFT': r.SHIFT, 'SUPERVISOR': r.SUPERVISOR,
-    'TYPE': r.TYPE, 'CENTRE TYPE': r.CTYPE, 'QTY': r.QTY
+    'DATE':r.DATE,'CAN NO':r.CANNO,'CENTRE NAME':r.CENTRE,
+    'LINE':r.LINE,'SHIFT':r.SHIFT,'SUPERVISOR':r.SUPERVISOR,
+    'TYPE':r.TYPE,'CENTRE TYPE':r.CTYPE,'QTY':r.QTY
   }));
 
   try {
-    const res = await fetch(sheetsUrl, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'sync', records })
-    });
-    const data = await res.json();
+    const data = await gsPost({ action:'sync', records });
     if (data.error) throw new Error(data.error);
     const now = new Date().toLocaleString('en-IN');
     localStorage.setItem(GS_SYNC_KEY, now);
     document.getElementById('last-sync-time').textContent = now;
-    updateSyncCounts(data.total);
-    setSyncStatus('connected', '✅ Push complete — ' + data.added + ' new, ' + data.skipped + ' skipped');
-    addSyncLog('⬆️ Push: ' + data.added + ' added, ' + data.skipped + ' skipped');
-    showToast('✅ Sheet-ல ' + data.added + ' records pushed!');
+    updateSyncCounts(data.total || data.added);
+    setSyncStatus('connected', '✅ Pushed — ' + data.added + ' new, ' + data.skipped + ' skipped');
+    addSyncLog('⬆️ Push: +' + data.added + ' added, ' + data.skipped + ' skipped');
+    showToast('✅ ' + data.added + ' records pushed!');
   } catch(e) {
     setSyncStatus('error', '❌ Push failed: ' + e.message);
     addSyncLog('❌ Push error: ' + e.message);
+    showToast('❌ Sync failed. Script settings check பண்ணுங்க.','#e53e3e');
   }
   isSyncing = false;
   document.getElementById('sync-btn').disabled = false;
 }
 
 async function pullFromSheets() {
-  if (!sheetsUrl) { showToast('⚠️ Sheets connect பண்ணுங்க!', '#e53e3e'); return; }
+  if (!sheetsUrl) { showToast('⚠️ Sheets connect பண்ணுங்க!','#e53e3e'); return; }
   if (isSyncing) return;
   isSyncing = true;
   setSyncStatus('syncing', '⬇️ Pulling from Sheets...');
   document.getElementById('sync-btn').disabled = true;
 
   try {
-    const res = await fetch(sheetsUrl + '?action=getAll');
-    const data = await res.json();
+    const data = await fetch(sheetsUrl + '?action=getAll').then(r=>r.json());
     if (data.error) throw new Error(data.error);
 
-    const sheetRecords = (data.records || []).map(r => ({
+    const sheetRecords = (data.records||[]).map(r => ({
       DATE: r['DATE'], CANNO: r['CAN NO'], CENTRE: r['CENTRE NAME'],
       LINE: r['LINE'], SHIFT: r['SHIFT'], SUPERVISOR: r['SUPERVISOR'],
-      TYPE: r['TYPE'], CTYPE: r['CENTRE TYPE'], QTY: parseFloat(r['QTY']) || 0,
+      TYPE: r['TYPE'], CTYPE: r['CENTRE TYPE'], QTY: parseFloat(r['QTY'])||0,
       _dt: parseDate(String(r['DATE'])), _row: r._row
     })).filter(r => r._dt && !isNaN(r._dt) && r.QTY > 0);
 
-    // Merge — never delete local
-    const existing = new Set(DATA.map(r => r.DATE+'-'+r.CANNO+'-'+r.QTY));
-    const newRecs = sheetRecords.filter(r => !existing.has(r.DATE+'-'+r.CANNO+'-'+r.QTY));
+    const existing = new Set(DATA.map(r=>r.DATE+'-'+r.CANNO+'-'+r.QTY));
+    const newRecs = sheetRecords.filter(r=>!existing.has(r.DATE+'-'+r.CANNO+'-'+r.QTY));
     DATA = [...DATA, ...newRecs];
-    DATA.sort((a,b) => b._dt - a._dt);
+    DATA.sort((a,b)=>b._dt-a._dt);
     saveToStorage();
     refreshAll();
 
@@ -1502,9 +1553,9 @@ async function pullFromSheets() {
     localStorage.setItem(GS_SYNC_KEY, now);
     document.getElementById('last-sync-time').textContent = now;
     updateSyncCounts(data.count);
-    setSyncStatus('connected', '✅ Pull complete — ' + newRecs.length + ' new records');
-    addSyncLog('⬇️ Pull: ' + newRecs.length + ' new records from Sheets');
-    showToast('✅ ' + newRecs.length + ' new records pulled from Sheet!');
+    setSyncStatus('connected', '✅ Pulled — ' + newRecs.length + ' new records');
+    addSyncLog('⬇️ Pull: +' + newRecs.length + ' new from Sheets');
+    showToast('✅ ' + newRecs.length + ' new records pulled!');
   } catch(e) {
     setSyncStatus('error', '❌ Pull failed: ' + e.message);
     addSyncLog('❌ Pull error: ' + e.message);
@@ -1514,43 +1565,40 @@ async function pullFromSheets() {
 }
 
 async function syncNow() {
+  if (!sheetsUrl) { showToast('⚠️ Sheets connect பண்ணுங்க!','#e53e3e'); return; }
   await pushToSheets();
   await pullFromSheets();
 }
 
 function disconnectSheets() {
-  if (!confirm('Sheets disconnect பண்ணணும்னா confirm பண்ணுங்க. Local data safe-ஆ இருக்கும்.')) return;
+  if (!confirm('Disconnect பண்ணணும்னா confirm. Local data safe-ஆ இருக்கும்.')) return;
   sheetsUrl = '';
   localStorage.removeItem(GS_URL_KEY);
   document.getElementById('sheets-setup-box').style.display = 'block';
   document.getElementById('sheets-connected-box').style.display = 'none';
-  addSyncLog('🔌 Disconnected from Sheets');
+  addSyncLog('🔌 Disconnected');
 }
 
 function initSheets() {
   const saved = localStorage.getItem(GS_URL_KEY);
-  if (saved) {
-    sheetsUrl = saved;
-    document.getElementById('sheet-url-inp').value = saved;
-    showSheetsConnected();
-    // Auto-pull on load (silent)
-    fetch(saved + '?action=getAll')
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) { setSyncStatus('warning', '⚠️ Sheet reachable இல்ல — offline mode'); return; }
-        updateSyncCounts(data.count || 0);
-        setSyncStatus('connected', '☁️ Connected — ' + (data.count||0) + ' records in Sheet');
-        addSyncLog('🔁 Auto-checked Sheets on load');
-      })
-      .catch(() => setSyncStatus('warning', '⚠️ Offline — local data use பண்றோம்'));
-  }
+  if (!saved) return;
+  sheetsUrl = saved;
+  document.getElementById('sheet-url-inp').value = saved;
+  showSheetsConnected();
+  fetch(saved + '?action=ping')
+    .then(r=>r.json())
+    .then(d => {
+      if (d.status === 'ok') {
+        setSyncStatus('connected', '☁️ Online — Sheet connected');
+        fetch(saved + '?action=getAll').then(r=>r.json()).then(d2=>updateSyncCounts(d2.count||0)).catch(()=>{});
+        addSyncLog('🔁 Auto-connected on load');
+      }
+    })
+    .catch(()=>setSyncStatus('warning', '⚠️ Offline mode — local data use பண்றோம்'));
 }
 
-// Auto-push after every add/upload
 function autoSyncIfConnected() {
-  if (sheetsUrl && DATA.length) {
-    setTimeout(() => pushToSheets(), 500);
-  }
+  if (sheetsUrl && DATA.length) setTimeout(()=>pushToSheets(), 800);
 }
 
 // ===== BACKUP / RESTORE =====
