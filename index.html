@@ -629,6 +629,14 @@ function parseDate(str) {
     const dt = new Date(+y,+m-1,+d);
     return isNaN(dt) ? null : dt;
   }
+  // ISO datetime with timezone e.g. 2026-07-03T18:30:00.000Z
+  // 18:30 UTC = 00:00 IST (next day) — so use IST offset (+5:30) to get correct local date
+  if (/^\d{4}-\d{2}-\d{2}T/.test(str)) {
+    const utcMs = new Date(str).getTime();
+    const istMs = utcMs + (5.5 * 60 * 60 * 1000); // shift to IST
+    const d = new Date(istMs);
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  }
   // yyyy-mm-dd (use local, not UTC — mobile fix)
   if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
     const parts = str.substring(0,10).split('-');
