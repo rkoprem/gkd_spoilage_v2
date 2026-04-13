@@ -684,9 +684,9 @@ function processFile(file) {
     if (name.endsWith('.csv')) {
       rows = parseCSV(e.target.result);
     } else {
-      const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array', cellDates:true});
       const ws = wb.Sheets[wb.SheetNames[0]];
-      rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      rows = XLSX.utils.sheet_to_json(ws, {defval:'', raw:false, dateNF:'dd-mm-yyyy'});
     }
     const parsed = normalizeRows(rows);
     if (!parsed.length) { showToast('⚠️ No valid data found in file!','#e53e3e'); return; }
@@ -741,8 +741,11 @@ function normalizeRows(rows) {
     let dt = null;
     if (dateRaw) {
       const dateStr = String(dateRaw).trim();
+      // JS Date object (from cellDates:true in XLSX) — most reliable
+      if (dateRaw instanceof Date) {
+        dt = new Date(dateRaw.getFullYear(), dateRaw.getMonth(), dateRaw.getDate());
       // ISO datetime with T (e.g. from Google Sheets: 2026-07-03T18:30:00.000Z)
-      if (/^\d{4}-\d{2}-\d{2}T/.test(dateStr)) {
+      } else if (/^\d{4}-\d{2}-\d{2}T/.test(dateStr)) {
         dt = parseDate(dateStr);
       } else if (!isNaN(dateRaw) && +dateRaw > 40000) {
         // Excel serial number
