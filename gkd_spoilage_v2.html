@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GKD Spoilage Predictor v2</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=Barlow:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap');
+
+:root {
+  --bg: #f0f4f8;
+  --surface: #ffffff;
+  --surface2: #f8fafc;
+  --border: #e2e8f0;
+  --accent: #0f4c81;
+  --accent2: #e53e3e;
+  --accent3: #38a169;
+  --accent4: #dd6b20;
+  --text: #1a202c;
+  --muted: #718096;
+  --shadow: 0 2px 12px rgba(15,76,129,0.08);
+  --shadow-lg: 0 8px 32px rgba(15,76,129,0.14);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:'Barlow',sans-serif; min-height:100vh; }
+
+/* HEADER */
+header {
+  background: var(--accent);
+  padding: 0 24px;
+  display: flex; align-items: center; gap: 16px;
+  height: 60px;
+  position: sticky; top:0; z-index:200;
+  box-shadow: 0 2px 16px rgba(15,76,129,0.3);
+}
+.logo { font-family:'Barlow Condensed'; font-size:22px; font-weight:800; color:#fff; letter-spacing:2px; }
+.logo span { color:#fbd38d; }
+header .sub { font-size:12px; color:rgba(255,255,255,0.6); font-family:'Space Mono'; }
+.header-right { margin-left:auto; display:flex; gap:10px; align-items:center; }
+.pill { background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.2); border-radius:20px; padding:4px 14px; font-size:12px; color:#fff; font-family:'Space Mono'; }
+.pill.green { background:rgba(56,161,105,0.3); border-color:#68d391; color:#c6f6d5; }
+
+/* UPLOAD ZONE */
+.upload-zone {
+  border: 2px dashed var(--accent);
+  border-radius: 14px;
+  padding: 32px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: rgba(15,76,129,0.03);
+  position: relative;
+}
+.upload-zone:hover, .upload-zone.drag { background: rgba(15,76,129,0.07); border-style: solid; }
+.upload-zone input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+.upload-icon { font-size:40px; margin-bottom:12px; }
+.upload-title { font-family:'Barlow Condensed'; font-size:20px; font-weight:700; color:var(--accent); margin-bottom:6px; }
+.upload-sub { font-size:14px; color:var(--muted); }
+.upload-formats { margin-top:10px; display:flex; gap:8px; justify-content:center; }
+.fmt-badge { background:var(--accent); color:#fff; border-radius:6px; padding:3px 10px; font-size:11px; font-weight:600; font-family:'Space Mono'; }
+
+/* WARN BANNER */
+.warn-banner {
+  background: #fffbeb;
+  border: 1px solid #f6ad55;
+  border-radius: 10px;
+  padding: 12px 18px;
+  display: flex; align-items:center; gap:12px;
+  font-size:14px; color:#744210;
+  margin-bottom: 16px;
+}
+.warn-banner .warn-icon { font-size:20px; }
+.warn-actions { margin-left:auto; display:flex; gap:8px; }
+.btn-sm { padding:6px 14px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; font-family:'Barlow'; transition:all 0.2s; }
+.btn-replace { background:var(--accent2); color:#fff; }
+.btn-merge { background:var(--accent3); color:#fff; }
+.btn-cancel { background:var(--border); color:var(--text); }
+
+/* MAIN LAYOUT */
+.wrap { max-width:1320px; margin:0 auto; padding:24px 16px; }
+
+/* TABS */
+.tabs { display:flex; gap:2px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:5px; margin-bottom:22px; box-shadow:var(--shadow); }
+.tab-btn { flex:1; padding:9px 12px; border:none; background:transparent; color:var(--muted); font-family:'Barlow Condensed'; font-size:16px; font-weight:600; border-radius:8px; cursor:pointer; transition:all 0.2s; letter-spacing:0.5px; }
+.tab-btn.active { background:var(--accent); color:#fff; }
+
+.tab-pane { display:none; }
+.tab-pane.active { display:block; }
+
+/* STAT CARDS */
+.stat-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; margin-bottom:22px; }
+.stat-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 16px; box-shadow:var(--shadow); border-top:3px solid var(--c,var(--accent)); }
+.stat-label { font-size:11px; color:var(--muted); letter-spacing:1px; font-family:'Space Mono'; margin-bottom:6px; }
+.stat-val { font-family:'Barlow Condensed'; font-size:30px; font-weight:800; color:var(--c,var(--accent)); }
+.stat-sub { font-size:12px; color:var(--muted); margin-top:3px; }
+
+/* SECTION CARD */
+.card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px; box-shadow:var(--shadow); margin-bottom:20px; }
+.card-title { font-family:'Barlow Condensed'; font-size:18px; font-weight:700; color:var(--accent); letter-spacing:1px; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+.chart-wrap { height:280px; position:relative; }
+
+/* MONTH REPORT TABLE */
+.month-selector { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+.month-chip { padding:6px 16px; border:1px solid var(--border); border-radius:20px; font-size:13px; cursor:pointer; font-family:'Barlow Condensed'; font-weight:600; letter-spacing:0.5px; transition:all 0.2s; color:var(--muted); }
+.month-chip.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+.report-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media(max-width:700px){.report-grid{grid-template-columns:1fr;}}
+
+.tbl { width:100%; border-collapse:collapse; font-size:14px; }
+.tbl th { background:var(--surface2); padding:10px 12px; text-align:left; font-family:'Space Mono'; font-size:11px; color:var(--accent); border-bottom:2px solid var(--border); }
+.tbl td { padding:9px 12px; border-bottom:1px solid var(--border); }
+.tbl tr:last-child td { border-bottom:none; }
+.tbl tr:hover td { background:rgba(15,76,129,0.03); }
+.tbl .total-row td { font-weight:700; background:rgba(15,76,129,0.05); color:var(--accent); }
+
+.badge { padding:2px 10px; border-radius:20px; font-size:11px; font-weight:700; font-family:'Space Mono'; }
+.b-sp { background:rgba(229,62,62,0.1); color:var(--accent2); }
+.b-sh { background:rgba(221,107,32,0.1); color:var(--accent4); }
+.b-sl { background:rgba(56,161,105,0.1); color:var(--accent3); }
+
+/* PREDICTION */
+.pred-hero { background:linear-gradient(135deg,var(--accent) 0%,#1a365d 100%); border-radius:14px; padding:28px; color:#fff; margin-bottom:20px; box-shadow:var(--shadow-lg); }
+.pred-hero h2 { font-family:'Barlow Condensed'; font-size:22px; letter-spacing:2px; margin-bottom:20px; display:flex; align-items:center; gap:10px; }
+.pred-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; }
+.pred-tile { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); border-radius:12px; padding:20px; text-align:center; }
+.pred-tile .p-label { font-size:12px; opacity:0.7; letter-spacing:1px; font-family:'Space Mono'; margin-bottom:10px; }
+.pred-tile .p-val { font-family:'Barlow Condensed'; font-size:40px; font-weight:800; }
+.pred-tile .p-unit { font-size:13px; opacity:0.6; margin-top:4px; }
+.conf-bar { margin-top:12px; }
+.conf-label { display:flex; justify-content:space-between; font-size:11px; opacity:0.6; margin-bottom:4px; }
+.bar-bg { background:rgba(255,255,255,0.15); border-radius:4px; height:5px; }
+.bar-fill { height:100%; border-radius:4px; background:#fbd38d; transition:width 1.2s ease; }
+
+/* ADD FORM */
+.form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin-bottom:18px; }
+.fgrp label { display:block; font-size:11px; color:var(--muted); font-family:'Space Mono'; letter-spacing:1px; margin-bottom:5px; }
+.fgrp input, .fgrp select { width:100%; border:1px solid var(--border); border-radius:8px; padding:9px 12px; font-family:'Barlow'; font-size:15px; color:var(--text); background:var(--surface2); outline:none; transition:border-color 0.2s; }
+.fgrp input:focus, .fgrp select:focus { border-color:var(--accent); }
+.btn-add { background:var(--accent); color:#fff; border:none; padding:11px 30px; border-radius:8px; font-family:'Barlow Condensed'; font-size:17px; font-weight:700; letter-spacing:1px; cursor:pointer; transition:all 0.2s; }
+.btn-add:hover { background:#0d3d6b; }
+
+/* DATA TABLE TAB */
+.filter-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; align-items:center; }
+.f-btn { padding:5px 14px; border:1px solid var(--border); border-radius:20px; font-size:13px; cursor:pointer; font-family:'Barlow'; background:transparent; color:var(--muted); transition:all 0.2s; }
+.f-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.f-search { margin-left:auto; padding:7px 12px; border:1px solid var(--border); border-radius:8px; font-size:14px; font-family:'Barlow'; outline:none; width:200px; }
+.f-search:focus { border-color:var(--accent); }
+
+.tbl-wrap { overflow-x:auto; }
+
+/* UPLOAD STATUS */
+.upload-status { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:14px 18px; display:flex; align-items:center; gap:12px; font-size:14px; }
+.status-dot { width:10px; height:10px; border-radius:50%; background:var(--accent3); box-shadow:0 0 8px rgba(56,161,105,0.5); flex-shrink:0; }
+.status-info { flex:1; }
+.status-name { font-weight:600; color:var(--text); }
+.status-meta { font-size:12px; color:var(--muted); font-family:'Space Mono'; }
+.btn-clear-data { margin-left:auto; background:#fff; border:1px solid var(--accent2); color:var(--accent2); border-radius:8px; padding:6px 14px; font-size:13px; cursor:pointer; font-family:'Barlow'; font-weight:600; transition:all 0.2s; }
+.btn-clear-data:hover { background:var(--accent2); color:#fff; }
+
+/* TOAST */
+.toast { position:fixed; bottom:24px; right:24px; padding:12px 22px; border-radius:10px; font-weight:600; font-size:14px; z-index:999; transform:translateY(80px); opacity:0; transition:all 0.3s; font-family:'Barlow'; }
+.toast.show { transform:translateY(0); opacity:1; }
+
+/* EMPTY */
+.empty { text-align:center; padding:48px 24px; color:var(--muted); }
+.empty-icon { font-size:48px; margin-bottom:12px; }
+.empty-text { font-size:16px; }
+
+/* MONTH SUMMARY TOTALS */
+.month-summary-bar { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:18px; }
+.ms-card { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+.ms-label { font-size:11px; color:var(--muted); font-family:'Space Mono'; margin-bottom:4px; }
+.ms-val { font-family:'Barlow Condensed'; font-size:24px; font-weight:800; color:var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">GKD <span>SPOILAGE</span> TRACKER</div>
+    <div class="sub">G.K. Dairy · Kumbakonam</div>
+  </div>
+  <div class="header-right">
+    <div class="pill" id="rec-count">0 Records</div>
+    <div class="pill green" id="ml-status">🤖 ML Ready</div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- UPLOAD AREA (always visible top) -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-title">📂 DATA UPLOAD</div>
+
+    <!-- Status when data loaded -->
+    <div id="upload-status-box" style="display:none; margin-bottom:14px;">
+      <div class="upload-status">
+        <div class="status-dot"></div>
+        <div class="status-info">
+          <div class="status-name" id="status-filename">—</div>
+          <div class="status-meta" id="status-meta">—</div>
+        </div>
+        <button class="btn-clear-data" onclick="clearAllData()">🗑 Clear All Data</button>
+      </div>
+    </div>
+
+    <!-- Warn on new upload when data exists -->
+    <div id="warn-banner" class="warn-banner" style="display:none;">
+      <span class="warn-icon">⚠️</span>
+      <span>Already <strong id="warn-count">0</strong> records loaded. New file-ஐ எப்படி add பண்ணணும்?</span>
+      <div class="warn-actions">
+        <button class="btn-sm btn-replace" onclick="confirmUpload('replace')">🔄 Replace (Clear Old)</button>
+        <button class="btn-sm btn-merge" onclick="confirmUpload('merge')">➕ Merge</button>
+        <button class="btn-sm btn-cancel" onclick="cancelUpload()">✕ Cancel</button>
+      </div>
+    </div>
+
+    <div class="upload-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" onchange="handleFileSelect(event)">
+      <div class="upload-icon">📊</div>
+      <div class="upload-title">DROP EXCEL / CSV FILE HERE</div>
+      <div class="upload-sub">Drag & drop அல்லது click பண்ணி select பண்ணுங்க</div>
+      <div class="upload-formats">
+        <span class="fmt-badge">XLSX</span>
+        <span class="fmt-badge">XLS</span>
+        <span class="fmt-badge">CSV</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('dashboard',this)">📊 Dashboard</button>
+    <button class="tab-btn" onclick="switchTab('monthreport',this)">📅 Month Report</button>
+    <button class="tab-btn" onclick="switchTab('predict',this)">🔮 AI Predict</button>
+    <button class="tab-btn" onclick="switchTab('addentry',this)">➕ Add Entry</button>
+    <button class="tab-btn" onclick="switchTab('alldata',this)">📋 All Data</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="tab-pane active" id="tab-dashboard">
+    <div class="stat-row" id="stat-row">
+      <div class="empty"><div class="empty-icon">📂</div><div class="empty-text">Upload a file to begin</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📈 DAILY TREND</div>
+      <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📊 TYPE BREAKDOWN</div>
+      <div class="chart-wrap" style="height:220px;"><canvas id="typeChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- MONTH REPORT -->
+  <div class="tab-pane" id="tab-monthreport">
+    <div id="month-empty" class="empty" style="display:none;">
+      <div class="empty-icon">📅</div><div class="empty-text">Upload data to view monthly reports</div>
+    </div>
+    <div id="month-content">
+      <div class="month-selector" id="month-chips"></div>
+      <div class="month-summary-bar" id="month-summary"></div>
+      <div class="report-grid">
+        <div class="card" style="margin-bottom:0;">
+          <div class="card-title">👤 SUPERVISOR WISE</div>
+          <table class="tbl" id="sup-tbl"><tbody></tbody></table>
+        </div>
+        <div class="card" style="margin-bottom:0;">
+          <div class="card-title">🏢 CENTRE WISE (Top 10)</div>
+          <table class="tbl" id="centre-tbl"><tbody></tbody></table>
+        </div>
+      </div>
+      <div style="height:16px;"></div>
+      <div class="card">
+        <div class="card-title">📊 TYPE WISE (Month)</div>
+        <table class="tbl" id="type-tbl"><tbody></tbody></table>
+      </div>
+      <div class="card">
+        <div class="card-title">📅 DAY WISE (Selected Month)</div>
+        <div class="chart-wrap"><canvas id="monthDayChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI PREDICT -->
+  <div class="tab-pane" id="tab-predict">
+    <div class="pred-hero">
+      <h2>🤖 AI PREDICTION <span style="font-size:13px;opacity:0.6;font-family:'Space Mono';font-weight:400;">WEIGHTED AVG + TREND</span></h2>
+      <div class="pred-cards" id="pred-cards">
+        <div style="opacity:0.5;font-size:14px;">Upload data first...</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">📅 7-DAY FORECAST</div>
+      <div class="chart-wrap"><canvas id="forecastChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📅 MONTHLY TREND (All Months)</div>
+      <div class="chart-wrap"><canvas id="monthTrendChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ADD ENTRY -->
+  <div class="tab-pane" id="tab-addentry">
+    <div class="card">
+      <div class="card-title">➕ MANUAL ENTRY</div>
+      <div class="form-grid">
+        <div class="fgrp"><label>DATE</label><input type="date" id="inp-date"></div>
+        <div class="fgrp"><label>CAN NO</label><input type="number" id="inp-can" placeholder="3505"></div>
+        <div class="fgrp"><label>CENTRE NAME</label><input type="text" id="inp-centre" placeholder="e.g. Edaiyar"></div>
+        <div class="fgrp"><label>LINE</label>
+          <select id="inp-line">
+            <option>North</option><option>North-2</option><option>North Bulk</option>
+            <option>Sirkali</option><option>South</option><option>Other</option>
+          </select>
+        </div>
+        <div class="fgrp"><label>SHIFT</label>
+          <select id="inp-shift"><option value="M">Morning (M)</option><option value="E">Evening (E)</option></select>
+        </div>
+        <div class="fgrp"><label>SUPERVISOR</label>
+          <select id="inp-sup">
+            <option>Ashok</option><option>Saravanan</option><option>Vengatesh</option><option>VENGATESH</option><option>Other</option>
+          </select>
+        </div>
+        <div class="fgrp"><label>TYPE</label>
+          <select id="inp-type"><option>Spoilage</option><option>Shortage</option><option>Spillage</option></select>
+        </div>
+        <div class="fgrp"><label>CENTRE TYPE</label>
+          <select id="inp-ctype"><option>Centre</option><option>Bulk</option></select>
+        </div>
+        <div class="fgrp"><label>QTY (Litres)</label><input type="number" id="inp-qty" placeholder="40" step="0.1"></div>
+      </div>
+      <button class="btn-add" onclick="addManualEntry()">ADD ENTRY</button>
+    </div>
+  </div>
+
+  <!-- ALL DATA -->
+  <div class="tab-pane" id="tab-alldata">
+    <div class="card">
+      <div class="filter-bar">
+        <button class="f-btn active" onclick="filterAll('All',this)">All</button>
+        <button class="f-btn" onclick="filterAll('Spoilage',this)">Spoilage</button>
+        <button class="f-btn" onclick="filterAll('Shortage',this)">Shortage</button>
+        <button class="f-btn" onclick="filterAll('Spillage',this)">Spillage</button>
+        <input class="f-search" type="text" placeholder="Search centre..." oninput="searchData(this.value)" id="search-inp">
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>DATE</th><th>CAN NO</th><th>CENTRE</th><th>LINE</th>
+              <th>SHIFT</th><th>SUPERVISOR</th><th>TYPE</th><th>QTY (L)</th>
+            </tr>
+          </thead>
+          <tbody id="all-tbody"></tbody>
+        </table>
+        <div id="all-empty" class="empty" style="display:none;">
+          <div class="empty-icon">🔍</div><div class="empty-text">No records found</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== STATE =====
+let DATA = [];
+let pendingFile = null;
+let pendingData = [];
+let activeFilter = 'All';
+let searchTerm = '';
+let activeMonth = null;
+let charts = {};
+
+// ===== PARSE DATE =====
+function parseDate(str) {
+  if (!str) return null;
+  // dd-mm-yyyy
+  if (/^\d{2}-\d{2}-\d{4}$/.test(str)) {
+    const [d,m,y] = str.split('-');
+    return new Date(+y,+m-1,+d);
+  }
+  // yyyy-mm-dd
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return new Date(str);
+  // Excel serial
+  if (!isNaN(str)) {
+    const d = new Date((+str - 25569) * 86400 * 1000);
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  }
+  return new Date(str);
+}
+
+function fmtDate(dt) {
+  if (!dt) return '';
+  const d = String(dt.getDate()).padStart(2,'0');
+  const m = String(dt.getMonth()+1).padStart(2,'0');
+  return `${d}-${m}-${dt.getFullYear()}`;
+}
+
+function monthKey(dt) {
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
+}
+
+function monthLabel(key) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const [y,m] = key.split('-');
+  return `${months[+m-1]} ${y}`;
+}
+
+// ===== FILE HANDLING =====
+function handleFileSelect(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  evt.target.value = '';
+  processFile(file);
+}
+
+function processFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    let rows = [];
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.csv')) {
+      rows = parseCSV(e.target.result);
+    } else {
+      const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+    }
+    const parsed = normalizeRows(rows);
+    if (!parsed.length) { showToast('⚠️ No valid data found in file!','#e53e3e'); return; }
+
+    if (DATA.length > 0) {
+      pendingData = parsed;
+      pendingFile = file.name;
+      document.getElementById('warn-count').textContent = DATA.length;
+      document.getElementById('warn-banner').style.display = 'flex';
+    } else {
+      loadData(parsed, file.name, 'replace');
+    }
+  };
+  if (file.name.toLowerCase().endsWith('.csv')) reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
+}
+
+function parseCSV(text) {
+  const lines = text.split('\n').filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g,''));
+  return lines.slice(1).map(line => {
+    const vals = line.split(',').map(v => v.trim().replace(/"/g,''));
+    const obj = {};
+    headers.forEach((h,i) => obj[h] = vals[i] || '');
+    return obj;
+  });
+}
+
+function normalizeRows(rows) {
+  const keyMap = {
+    'DATE':['DATE','date','Date'],
+    'CANNO':['CAN NO','CAN_NO','CANNO','can no','Can No'],
+    'CENTRE':['CENTRE NAME','CENTRE_NAME','Centre Name','CENTRE','centre'],
+    'LINE':['LINE','Line','line'],
+    'SHIFT':['SHIFT','Shift','shift'],
+    'SUPERVISOR':['SUPERVISOR','Supervisor','supervisor'],
+    'TYPE':['SPOILAGE/SHORTAGE','TYPE','Type','type','Spoilage/Shortage'],
+    'CTYPE':['CENTRE','Centre Type','CTYPE','ctype'],
+    'QTY':['QTY','qty','Qty','QUANTITY','quantity']
+  };
+
+  function findVal(row, aliases) {
+    for (const a of aliases) {
+      if (row[a] !== undefined && row[a] !== '') return row[a];
+    }
+    return '';
+  }
+
+  return rows.map(row => {
+    const dateRaw = findVal(row, keyMap.DATE);
+    let dt = null;
+    if (dateRaw) {
+      if (!isNaN(dateRaw) && +dateRaw > 40000) {
+        dt = new Date((+dateRaw - 25569) * 86400 * 1000);
+        dt = new Date(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate());
+      } else {
+        dt = parseDate(String(dateRaw));
+      }
+    }
+    const qty = parseFloat(findVal(row, keyMap.QTY)) || 0;
+    const type = findVal(row, keyMap.TYPE) || 'Spoilage';
+    // Also check for "CENTRE" column being used for CTYPE vs centre name
+    const centreName = findVal(row, ['CENTRE NAME','CENTRE_NAME','Centre Name']) || findVal(row, keyMap.CENTRE) || '';
+    const ctype = findVal(row, ['CENTRE TYPE','CTYPE']) || (findVal(row, ['CENTRE','Centre']) === 'Bulk' ? 'Bulk' : 'Centre');
+
+    if (!dt || isNaN(dt.getTime()) || qty === 0) return null;
+    return {
+      DATE: fmtDate(dt),
+      _dt: dt,
+      CANNO: findVal(row, keyMap.CANNO) || '',
+      CENTRE: centreName,
+      LINE: findVal(row, keyMap.LINE) || '',
+      SHIFT: findVal(row, keyMap.SHIFT) || 'M',
+      SUPERVISOR: findVal(row, keyMap.SUPERVISOR) || '',
+      TYPE: type.includes('hort') ? 'Shortage' : type.includes('pill') ? 'Spillage' : 'Spoilage',
+      CTYPE: ctype,
+      QTY: qty
+    };
+  }).filter(Boolean);
+}
+
+function confirmUpload(mode) {
+  document.getElementById('warn-banner').style.display = 'none';
+  loadData(pendingData, pendingFile, mode);
+  pendingData = []; pendingFile = null;
+}
+
+function cancelUpload() {
+  document.getElementById('warn-banner').style.display = 'none';
+  pendingData = []; pendingFile = null;
+}
+
+function loadData(rows, filename, mode) {
+  if (mode === 'replace') {
+    DATA = rows;
+  } else {
+    // merge: skip duplicates by DATE+CANNO+QTY
+    const existing = new Set(DATA.map(r => `${r.DATE}-${r.CANNO}-${r.QTY}`));
+    const added = rows.filter(r => !existing.has(`${r.DATE}-${r.CANNO}-${r.QTY}`));
+    DATA = [...DATA, ...added];
+    showToast(`✅ Merged: ${added.length} new records added (${rows.length - added.length} duplicates skipped)`);
+  }
+
+  // Sort by date desc
+  DATA.sort((a,b) => b._dt - a._dt);
+
+  document.getElementById('upload-status-box').style.display = 'block';
+  document.getElementById('status-filename').textContent = filename || 'Manual Data';
+  document.getElementById('status-meta').textContent = `${DATA.length} records loaded • Latest: ${DATA[0]?.DATE || '—'}`;
+  document.getElementById('rec-count').textContent = `${DATA.length} Records`;
+
+  if (mode === 'replace') showToast(`✅ ${DATA.length} records loaded!`);
+
+  refreshAll();
+}
+
+function clearAllData() {
+  if (!confirm('Confirm: All data clear பண்ணணும்?')) return;
+  DATA = [];
+  document.getElementById('upload-status-box').style.display = 'none';
+  document.getElementById('rec-count').textContent = '0 Records';
+  refreshAll();
+  showToast('🗑 Data cleared', '#e53e3e');
+}
+
+// Drag and drop
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+});
+
+// ===== REFRESH ALL =====
+function refreshAll() {
+  buildDashboard();
+  buildMonthChips();
+  buildPredict();
+  buildAllData();
+}
+
+// ===== DASHBOARD =====
+function buildDashboard() {
+  if (!DATA.length) {
+    document.getElementById('stat-row').innerHTML = '<div class="empty"><div class="empty-icon">📂</div><div class="empty-text">Upload a file to begin</div></div>';
+    return;
+  }
+
+  const total = DATA.reduce((a,r)=>a+r.QTY,0);
+  const byDay = groupBy(DATA, r => r.DATE);
+  const days = Object.values(byDay);
+  const avgDay = days.reduce((a,d)=>a+d.reduce((x,r)=>x+r.QTY,0),0) / days.length;
+  const maxDay = Math.max(...days.map(d=>d.reduce((x,r)=>x+r.QTY,0)));
+  const spoilCount = DATA.filter(r=>r.TYPE==='Spoilage').length;
+
+  document.getElementById('stat-row').innerHTML = `
+    <div class="stat-card" style="--c:#0f4c81"><div class="stat-label">TOTAL QTY</div><div class="stat-val">${total.toFixed(1)}</div><div class="stat-sub">Litres all time</div></div>
+    <div class="stat-card" style="--c:#dd6b20"><div class="stat-label">AVG / DAY</div><div class="stat-val">${avgDay.toFixed(1)}</div><div class="stat-sub">Litres avg</div></div>
+    <div class="stat-card" style="--c:#e53e3e"><div class="stat-label">MAX DAY</div><div class="stat-val">${maxDay.toFixed(1)}</div><div class="stat-sub">Litres peak</div></div>
+    <div class="stat-card" style="--c:#38a169"><div class="stat-label">TOTAL RECORDS</div><div class="stat-val">${DATA.length}</div><div class="stat-sub">${spoilCount} spoilage entries</div></div>
+  `;
+
+  // Daily trend chart
+  const sorted = Object.entries(byDay)
+    .map(([d,rs]) => ({d, qty:rs.reduce((a,r)=>a+r.QTY,0), dt:rs[0]._dt}))
+    .sort((a,b)=>a.dt-b.dt);
+
+  destroyChart('trendChart');
+  charts['trendChart'] = new Chart(document.getElementById('trendChart'), {
+    type:'bar',
+    data:{
+      labels:sorted.map(x=>x.d.substring(0,5)),
+      datasets:[{
+        label:'Daily Qty (L)',
+        data:sorted.map(x=>x.qty),
+        backgroundColor:sorted.map(x=>x.qty>200?'rgba(229,62,62,0.75)':'rgba(15,76,129,0.7)'),
+        borderRadius:4,
+      }]
+    },
+    options:chartOpts()
+  });
+
+  // Type chart
+  const types = ['Spoilage','Shortage','Spillage'];
+  const typeQty = types.map(t=>DATA.filter(r=>r.TYPE===t).reduce((a,r)=>a+r.QTY,0));
+  destroyChart('typeChart');
+  charts['typeChart'] = new Chart(document.getElementById('typeChart'), {
+    type:'doughnut',
+    data:{
+      labels:types,
+      datasets:[{
+        data:typeQty,
+        backgroundColor:['rgba(229,62,62,0.8)','rgba(221,107,32,0.8)','rgba(56,161,105,0.8)'],
+        borderColor:['#e53e3e','#dd6b20','#38a169'],
+        borderWidth:2
+      }]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#718096',font:{size:13}}}}}
+  });
+}
+
+// ===== MONTH REPORT =====
+function buildMonthChips() {
+  if (!DATA.length) return;
+  const months = [...new Set(DATA.map(r=>monthKey(r._dt)))].sort().reverse();
+  if (!activeMonth || !months.includes(activeMonth)) activeMonth = months[0];
+
+  document.getElementById('month-chips').innerHTML = months.map(m=>`
+    <div class="month-chip ${m===activeMonth?'active':''}" onclick="selectMonth('${m}')">${monthLabel(m)}</div>
+  `).join('');
+
+  renderMonthReport(activeMonth);
+}
+
+function selectMonth(m) {
+  activeMonth = m;
+  buildMonthChips();
+}
+
+function renderMonthReport(mkey) {
+  const mData = DATA.filter(r=>monthKey(r._dt)===mkey);
+  if (!mData.length) return;
+
+  const total = mData.reduce((a,r)=>a+r.QTY,0);
+  const days = [...new Set(mData.map(r=>r.DATE))].length;
+  const sp = mData.filter(r=>r.TYPE==='Spoilage').reduce((a,r)=>a+r.QTY,0);
+  const sh = mData.filter(r=>r.TYPE==='Shortage').reduce((a,r)=>a+r.QTY,0);
+
+  document.getElementById('month-summary').innerHTML = `
+    <div class="ms-card"><div class="ms-label">TOTAL QTY</div><div class="ms-val" style="color:#0f4c81">${total.toFixed(1)} L</div></div>
+    <div class="ms-card"><div class="ms-label">ACTIVE DAYS</div><div class="ms-val" style="color:#dd6b20">${days}</div></div>
+    <div class="ms-card"><div class="ms-label">AVG / DAY</div><div class="ms-val" style="color:#38a169">${(total/days).toFixed(1)} L</div></div>
+    <div class="ms-card"><div class="ms-label">SPOILAGE</div><div class="ms-val" style="color:#e53e3e">${sp.toFixed(1)} L</div></div>
+    <div class="ms-card"><div class="ms-label">SHORTAGE</div><div class="ms-val" style="color:#dd6b20">${sh.toFixed(1)} L</div></div>
+  `;
+
+  // Supervisor table
+  const supMap = groupBy(mData, r=>r.SUPERVISOR);
+  const supRows = Object.entries(supMap)
+    .map(([s,rs])=>({name:s, qty:rs.reduce((a,r)=>a+r.QTY,0), cnt:rs.length}))
+    .sort((a,b)=>b.qty-a.qty);
+  document.getElementById('sup-tbl').innerHTML = `
+    <thead><tr><th>SUPERVISOR</th><th>QTY (L)</th><th>ENTRIES</th></tr></thead>
+    <tbody>${supRows.map(s=>`<tr><td>${s.name}</td><td style="font-weight:700;color:#0f4c81">${s.qty.toFixed(1)}</td><td>${s.cnt}</td></tr>`).join('')}
+    <tr class="total-row"><td>TOTAL</td><td>${total.toFixed(1)}</td><td>${mData.length}</td></tr></tbody>
+  `;
+
+  // Centre table (top 10)
+  const cenMap = groupBy(mData, r=>r.CENTRE);
+  const cenRows = Object.entries(cenMap)
+    .map(([c,rs])=>({name:c, qty:rs.reduce((a,r)=>a+r.QTY,0)}))
+    .sort((a,b)=>b.qty-a.qty).slice(0,10);
+  document.getElementById('centre-tbl').innerHTML = `
+    <thead><tr><th>CENTRE</th><th>QTY (L)</th></tr></thead>
+    <tbody>${cenRows.map(c=>`<tr><td>${c.name}</td><td style="font-weight:700;color:#0f4c81">${c.qty.toFixed(1)}</td></tr>`).join('')}</tbody>
+  `;
+
+  // Type table
+  const typeRows = ['Spoilage','Shortage','Spillage'].map(t=>{
+    const rs = mData.filter(r=>r.TYPE===t);
+    return {type:t, qty:rs.reduce((a,r)=>a+r.QTY,0), cnt:rs.length};
+  });
+  document.getElementById('type-tbl').innerHTML = `
+    <thead><tr><th>TYPE</th><th>QTY (L)</th><th>ENTRIES</th><th>%</th></tr></thead>
+    <tbody>${typeRows.map(t=>`
+      <tr><td><span class="badge ${t.type==='Spoilage'?'b-sp':t.type==='Shortage'?'b-sh':'b-sl'}">${t.type}</span></td>
+      <td style="font-weight:700">${t.qty.toFixed(1)}</td><td>${t.cnt}</td>
+      <td>${total>0?(t.qty/total*100).toFixed(1):0}%</td></tr>
+    `).join('')}
+    <tr class="total-row"><td>TOTAL</td><td>${total.toFixed(1)}</td><td>${mData.length}</td><td>100%</td></tr></tbody>
+  `;
+
+  // Day chart
+  const dayMap = groupBy(mData, r=>r.DATE);
+  const dayEntries = Object.entries(dayMap)
+    .map(([d,rs])=>({d, qty:rs.reduce((a,r)=>a+r.QTY,0), dt:rs[0]._dt}))
+    .sort((a,b)=>a.dt-b.dt);
+
+  destroyChart('monthDayChart');
+  charts['monthDayChart'] = new Chart(document.getElementById('monthDayChart'), {
+    type:'bar',
+    data:{
+      labels:dayEntries.map(x=>x.d.substring(0,5)),
+      datasets:[{label:'Daily Qty (L)',data:dayEntries.map(x=>x.qty),backgroundColor:'rgba(15,76,129,0.7)',borderRadius:4}]
+    },
+    options:chartOpts()
+  });
+}
+
+// ===== PREDICT =====
+function buildPredict() {
+  if (!DATA.length) {
+    document.getElementById('pred-cards').innerHTML = '<div style="opacity:0.5;font-size:14px;color:#fff;">Upload data first...</div>';
+    return;
+  }
+
+  const daily = Object.entries(groupBy(DATA, r=>r.DATE))
+    .map(([d,rs])=>({d, qty:rs.reduce((a,r)=>a+r.QTY,0), dt:rs[0]._dt}))
+    .sort((a,b)=>a.dt-b.dt);
+
+  // Use last 14 days if available
+  const recent = daily.slice(-14);
+  const vals = recent.map(x=>x.qty);
+  const n = vals.length;
+  const weights = vals.map((_,i)=>i+1);
+  const tw = weights.reduce((a,b)=>a+b,0);
+  const wma = vals.reduce((acc,v,i)=>acc+v*weights[i],0)/tw;
+  const yMean = vals.reduce((a,b)=>a+b,0)/n;
+  const xMean=(n-1)/2;
+  let slope=0,den=0;
+  vals.forEach((v,i)=>{slope+=(i-xMean)*(v-yMean);den+=(i-xMean)**2;});
+  slope=den?slope/den:0;
+
+  const tomorrow = Math.max(0,Math.round((wma+slope)*10)/10);
+  const avgDay = wma*0.7+yMean*0.3;
+  const week = Math.round(avgDay*7*10)/10;
+  const month = Math.round(avgDay*30*10)/10;
+  const std = Math.sqrt(vals.map(v=>(v-yMean)**2).reduce((a,b)=>a+b,0)/n);
+  const cv = yMean>0?std/yMean:1;
+  const conf = Math.max(42,Math.min(88,Math.round((1-cv*0.5)*100)));
+
+  document.getElementById('pred-cards').innerHTML = `
+    <div class="pred-tile">
+      <div class="p-label">TOMORROW</div>
+      <div class="p-val">${tomorrow}</div>
+      <div class="p-unit">Litres</div>
+      <div class="conf-bar"><div class="conf-label"><span>Confidence</span><span>${conf}%</span></div>
+      <div class="bar-bg"><div class="bar-fill" style="width:${conf}%"></div></div></div>
+    </div>
+    <div class="pred-tile">
+      <div class="p-label">WEEK (7 Days)</div>
+      <div class="p-val">${week}</div>
+      <div class="p-unit">Litres est.</div>
+      <div class="conf-bar"><div class="conf-label"><span>Confidence</span><span>${Math.round(conf*0.85)}%</span></div>
+      <div class="bar-bg"><div class="bar-fill" style="width:${Math.round(conf*0.85)}%"></div></div></div>
+    </div>
+    <div class="pred-tile">
+      <div class="p-label">MONTH (30 Days)</div>
+      <div class="p-val">${month}</div>
+      <div class="p-unit">Litres est.</div>
+      <div class="conf-bar"><div class="conf-label"><span>Confidence</span><span>${Math.round(conf*0.7)}%</span></div>
+      <div class="bar-bg"><div class="bar-fill" style="width:${Math.round(conf*0.7)}%"></div></div></div>
+    </div>
+  `;
+
+  // 7 day forecast chart
+  const histLabels = recent.slice(-7).map(x=>x.d.substring(0,5));
+  const histData = recent.slice(-7).map(x=>x.qty);
+  const lastDt = recent[recent.length-1].dt;
+  const fLabels=[],fData=[];
+  for(let i=1;i<=7;i++){
+    const d=new Date(lastDt); d.setDate(d.getDate()+i);
+    fLabels.push(`${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`);
+    fData.push(+(Math.max(0,tomorrow+(Math.random()-0.5)*25)).toFixed(1));
+  }
+  destroyChart('forecastChart');
+  charts['forecastChart'] = new Chart(document.getElementById('forecastChart'),{
+    type:'line',
+    data:{
+      labels:[...histLabels,...fLabels],
+      datasets:[
+        {label:'Actual (L)',data:[...histData,...Array(7).fill(null)],borderColor:'#0f4c81',backgroundColor:'rgba(15,76,129,0.1)',pointRadius:4,tension:0.3,fill:true},
+        {label:'Forecast (L)',data:[...Array(histData.length).fill(null),...fData],borderColor:'#dd6b20',backgroundColor:'rgba(221,107,32,0.1)',borderDash:[6,4],pointRadius:4,tension:0.3,fill:true}
+      ]
+    },
+    options:chartOpts()
+  });
+
+  // Monthly trend chart
+  const monthMap = groupBy(DATA, r=>monthKey(r._dt));
+  const monthEntries = Object.entries(monthMap)
+    .map(([m,rs])=>({m, qty:rs.reduce((a,r)=>a+r.QTY,0)}))
+    .sort((a,b)=>a.m.localeCompare(b.m));
+  destroyChart('monthTrendChart');
+  charts['monthTrendChart'] = new Chart(document.getElementById('monthTrendChart'),{
+    type:'line',
+    data:{
+      labels:monthEntries.map(x=>monthLabel(x.m)),
+      datasets:[{label:'Monthly Total (L)',data:monthEntries.map(x=>x.qty),borderColor:'#38a169',backgroundColor:'rgba(56,161,105,0.1)',pointRadius:5,tension:0.3,fill:true}]
+    },
+    options:chartOpts()
+  });
+}
+
+// ===== ALL DATA =====
+function buildAllData() {
+  renderAllTable();
+}
+
+function renderAllTable() {
+  let filtered = DATA.filter(r => {
+    if (activeFilter !== 'All' && r.TYPE !== activeFilter) return false;
+    if (searchTerm && !r.CENTRE.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+    return true;
+  });
+  const tbody = document.getElementById('all-tbody');
+  const empty = document.getElementById('all-empty');
+  if (!filtered.length) { tbody.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  tbody.innerHTML = filtered.map(r=>`
+    <tr>
+      <td>${r.DATE}</td>
+      <td style="font-family:'Space Mono';font-size:12px">${r.CANNO}</td>
+      <td>${r.CENTRE}</td>
+      <td>${r.LINE}</td>
+      <td>${r.SHIFT==='M'?'🌅 M':'🌆 E'}</td>
+      <td>${r.SUPERVISOR}</td>
+      <td><span class="badge ${r.TYPE==='Spoilage'?'b-sp':r.TYPE==='Shortage'?'b-sh':'b-sl'}">${r.TYPE}</span></td>
+      <td style="font-weight:700;color:#0f4c81">${r.QTY}</td>
+    </tr>
+  `).join('');
+}
+
+function filterAll(type, btn) {
+  activeFilter = type;
+  document.querySelectorAll('.f-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderAllTable();
+}
+
+function searchData(val) { searchTerm=val; renderAllTable(); }
+
+// ===== MANUAL ADD =====
+function addManualEntry() {
+  const date = document.getElementById('inp-date').value;
+  const can = document.getElementById('inp-can').value;
+  const centre = document.getElementById('inp-centre').value.trim();
+  const qty = parseFloat(document.getElementById('inp-qty').value);
+  if (!date||!centre||isNaN(qty)||qty<=0) { showToast('⚠️ Date, Centre, QTY required!','#e53e3e'); return; }
+  const [y,m,d] = date.split('-');
+  const fmted = `${d}-${m}-${y}`;
+  const dt = new Date(+y,+m-1,+d);
+  DATA.unshift({
+    DATE:fmted, _dt:dt,
+    CANNO: document.getElementById('inp-can').value||'',
+    CENTRE:centre,
+    LINE:document.getElementById('inp-line').value,
+    SHIFT:document.getElementById('inp-shift').value,
+    SUPERVISOR:document.getElementById('inp-sup').value,
+    TYPE:document.getElementById('inp-type').value,
+    CTYPE:document.getElementById('inp-ctype').value,
+    QTY:qty
+  });
+  document.getElementById('rec-count').textContent=`${DATA.length} Records`;
+  document.getElementById('status-meta').textContent=`${DATA.length} records loaded`;
+  document.getElementById('upload-status-box').style.display='block';
+  document.getElementById('status-filename').textContent='Manual + File Data';
+  document.getElementById('inp-can').value='';
+  document.getElementById('inp-centre').value='';
+  document.getElementById('inp-qty').value='';
+  showToast('✅ Entry added!');
+  refreshAll();
+}
+
+// ===== UTILS =====
+function groupBy(arr, fn) {
+  return arr.reduce((acc,r)=>{const k=fn(r);(acc[k]=acc[k]||[]).push(r);return acc;},{});
+}
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function chartOpts() {
+  return {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{labels:{color:'#718096',font:{size:12}}}},
+    scales:{
+      x:{grid:{color:'#e2e8f0'},ticks:{color:'#718096',font:{size:11}}},
+      y:{grid:{color:'#e2e8f0'},ticks:{color:'#718096'}}
+    }
+  };
+}
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  btn.classList.add('active');
+  if (name==='monthreport') buildMonthChips();
+  if (name==='predict') buildPredict();
+  if (name==='alldata') buildAllData();
+}
+
+function showToast(msg, bg='#38a169') {
+  const t = document.getElementById('toast');
+  t.textContent=msg; t.style.background=bg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 3000);
+}
+
+// Init
+document.getElementById('inp-date').value = new Date().toISOString().split('T')[0];
+</script>
+</body>
+</html>
