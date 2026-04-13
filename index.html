@@ -399,6 +399,46 @@ let searchTerm = '';
 let activeMonth = null;
 let charts = {};
 
+const LS_KEY = 'gkd_spoilage_data';
+const LS_META = 'gkd_spoilage_meta';
+
+function saveToStorage() {
+  try {
+    const toSave = DATA.map(r => ({
+      DATE:r.DATE,CANNO:r.CANNO,CENTRE:r.CENTRE,
+      LINE:r.LINE,SHIFT:r.SHIFT,SUPERVISOR:r.SUPERVISOR,
+      TYPE:r.TYPE,CTYPE:r.CTYPE,QTY:r.QTY
+    }));
+    localStorage.setItem(LS_KEY, JSON.stringify(toSave));
+    localStorage.setItem(LS_META, JSON.stringify({
+      filename: document.getElementById('status-filename').textContent,
+      saved: new Date().toLocaleString('en-IN'),
+      count: DATA.length
+    }));
+  } catch(e) {
+    showToast('\u26a0\ufe0f Storage full! பழைய data clear பண்ணுங்க.','#e53e3e');
+  }
+}
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    const meta = localStorage.getItem(LS_META);
+    if (!raw) return;
+    const parsed = JSON.parse(raw).map(r => ({...r, _dt:parseDate(r.DATE)})).filter(r=>r._dt&&!isNaN(r._dt));
+    if (!parsed.length) return;
+    DATA = parsed;
+    DATA.sort((a,b)=>b._dt-a._dt);
+    const m = meta ? JSON.parse(meta) : {};
+    document.getElementById('upload-status-box').style.display='block';
+    document.getElementById('status-filename').textContent = m.filename||'Saved Data';
+    document.getElementById('status-meta').textContent = DATA.length+' records \u2022 \ud83d\udcbe Saved: '+(m.saved||'\u2014');
+    document.getElementById('rec-count').textContent = DATA.length+' Records';
+    refreshAll();
+    showToast('\ud83d\udcbe '+DATA.length+' records restored!');
+  } catch(e) { /* silent */ }
+}
+
 // ===== PARSE DATE =====
 function parseDate(str) {
   if (!str) return null;
@@ -567,12 +607,15 @@ function loadData(rows, filename, mode) {
 
   if (mode === 'replace') showToast(`✅ ${DATA.length} records loaded!`);
 
+  saveToStorage();
   refreshAll();
 }
 
 function clearAllData() {
   if (!confirm('Confirm: All data clear பண்ணணும்?')) return;
   DATA = [];
+  localStorage.removeItem(LS_KEY);
+  localStorage.removeItem(LS_META);
   document.getElementById('upload-status-box').style.display = 'none';
   document.getElementById('rec-count').textContent = '0 Records';
   refreshAll();
@@ -906,6 +949,7 @@ function addManualEntry() {
   document.getElementById('inp-can').value='';
   document.getElementById('inp-centre').value='';
   document.getElementById('inp-qty').value='';
+  saveToStorage();
   showToast('✅ Entry added!');
   refreshAll();
 }
@@ -1148,6 +1192,7 @@ function openPrint(html) {
 
 // Init
 document.getElementById('inp-date').value = new Date().toISOString().split('T')[0];
+loadFromStorage();
 </script>
 </body>
 </html>
