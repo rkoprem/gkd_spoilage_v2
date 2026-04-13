@@ -150,6 +150,14 @@ header .sub { font-size:12px; color:rgba(255,255,255,0.6); font-family:'Space Mo
 .f-search { margin-left:auto; padding:7px 12px; border:1px solid var(--border); border-radius:8px; font-size:14px; font-family:'Barlow'; outline:none; width:200px; }
 .f-search:focus { border-color:var(--accent); }
 
+/* EXPORT BUTTONS */
+.export-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; align-items:center; }
+.btn-export { display:flex; align-items:center; gap:6px; padding:7px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; font-family:'Barlow'; transition:all 0.2s; }
+.btn-export:hover { opacity:0.85; transform:translateY(-1px); }
+.btn-xlsx { background:#1d6f42; color:#fff; }
+.btn-csv  { background:#0f4c81; color:#fff; }
+.btn-print { background:#4a5568; color:#fff; }
+
 .tbl-wrap { overflow-x:auto; }
 
 /* UPLOAD STATUS */
@@ -263,6 +271,12 @@ header .sub { font-size:12px; color:rgba(255,255,255,0.6); font-family:'Space Mo
     </div>
     <div id="month-content">
       <div class="month-selector" id="month-chips"></div>
+      <div class="export-row" style="margin-bottom:10px;">
+        <span style="font-size:12px;color:var(--muted);font-family:'Space Mono';">EXPORT MONTH:</span>
+        <button class="btn-export btn-xlsx" onclick="exportXLSX('month')">📥 Excel (XLSX)</button>
+        <button class="btn-export btn-csv"  onclick="exportCSV('month')">📄 CSV</button>
+        <button class="btn-export btn-print" onclick="printMonth()">🖨 Print Report</button>
+      </div>
       <div class="month-summary-bar" id="month-summary"></div>
       <div class="report-grid">
         <div class="card" style="margin-bottom:0;">
@@ -347,6 +361,12 @@ header .sub { font-size:12px; color:rgba(255,255,255,0.6); font-family:'Space Mo
         <button class="f-btn" onclick="filterAll('Shortage',this)">Shortage</button>
         <button class="f-btn" onclick="filterAll('Spillage',this)">Spillage</button>
         <input class="f-search" type="text" placeholder="Search centre..." oninput="searchData(this.value)" id="search-inp">
+      </div>
+      <div class="export-row">
+        <span style="font-size:12px;color:var(--muted);font-family:'Space Mono';">EXPORT:</span>
+        <button class="btn-export btn-xlsx" onclick="exportXLSX('all')">📥 Excel (XLSX)</button>
+        <button class="btn-export btn-csv"  onclick="exportCSV('all')">📄 CSV</button>
+        <button class="btn-export btn-print" onclick="printTable()">🖨 Print</button>
       </div>
       <div class="tbl-wrap">
         <table class="tbl">
@@ -925,6 +945,205 @@ function showToast(msg, bg='#38a169') {
   t.textContent=msg; t.style.background=bg;
   t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 3000);
+}
+
+// ===== EXPORT FUNCTIONS =====
+
+function getFilteredData() {
+  return DATA.filter(r => {
+    if (activeFilter !== 'All' && r.TYPE !== activeFilter) return false;
+    if (searchTerm && !r.CENTRE.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+    return true;
+  });
+}
+
+function getMonthData() {
+  if (!activeMonth) return DATA;
+  return DATA.filter(r => monthKey(r._dt) === activeMonth);
+}
+
+function toExportRows(rows) {
+  return rows.map(r => ({
+    'DATE': r.DATE,
+    'CAN NO': r.CANNO,
+    'CENTRE NAME': r.CENTRE,
+    'LINE': r.LINE,
+    'SHIFT': r.SHIFT,
+    'SUPERVISOR': r.SUPERVISOR,
+    'TYPE': r.TYPE,
+    'CENTRE TYPE': r.CTYPE,
+    'QTY (L)': r.QTY
+  }));
+}
+
+function exportXLSX(scope) {
+  if (!DATA.length) { showToast('⚠️ No data to export!', '#e53e3e'); return; }
+  const rows = scope === 'month' ? getMonthData() : getFilteredData();
+  if (!rows.length) { showToast('⚠️ No data found!', '#e53e3e'); return; }
+
+  const wb = XLSX.utils.book_new();
+
+  // Main data sheet
+  const ws1 = XLSX.utils.json_to_sheet(toExportRows(rows));
+  // Column widths
+  ws1['!cols'] = [12,10,20,14,8,14,12,14,10].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws1, 'Data');
+
+  if (scope === 'month' && activeMonth) {
+    // Summary sheet
+    const mData = rows;
+    const total = mData.reduce((a,r)=>a+r.QTY,0);
+    const days = [...new Set(mData.map(r=>r.DATE))].length;
+
+    // Supervisor summary
+    const supMap = groupBy(mData, r=>r.SUPERVISOR);
+    const supRows = Object.entries(supMap)
+      .map(([s,rs])=>({'SUPERVISOR':s,'QTY (L)':+rs.reduce((a,r)=>a+r.QTY,0).toFixed(2),'ENTRIES':rs.length}))
+      .sort((a,b)=>b['QTY (L)']-a['QTY (L)']);
+    supRows.push({'SUPERVISOR':'TOTAL','QTY (L)':+total.toFixed(2),'ENTRIES':mData.length});
+    const ws2 = XLSX.utils.json_to_sheet(supRows);
+    ws2['!cols']=[{wch:16},{wch:12},{wch:10}];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Supervisor Summary');
+
+    // Centre summary
+    const cenMap = groupBy(mData, r=>r.CENTRE);
+    const cenRows = Object.entries(cenMap)
+      .map(([c,rs])=>({'CENTRE':c,'QTY (L)':+rs.reduce((a,r)=>a+r.QTY,0).toFixed(2),'ENTRIES':rs.length}))
+      .sort((a,b)=>b['QTY (L)']-a['QTY (L)']);
+    const ws3 = XLSX.utils.json_to_sheet(cenRows);
+    ws3['!cols']=[{wch:22},{wch:12},{wch:10}];
+    XLSX.utils.book_append_sheet(wb, ws3, 'Centre Summary');
+
+    // Type summary
+    const typeRows3 = ['Spoilage','Shortage','Spillage'].map(t=>{
+      const rs=mData.filter(r=>r.TYPE===t);
+      const qty=rs.reduce((a,r)=>a+r.QTY,0);
+      return {'TYPE':t,'QTY (L)':+qty.toFixed(2),'ENTRIES':rs.length,'PERCENT':(total>0?(qty/total*100).toFixed(1)+'%':'0%')};
+    });
+    const ws4 = XLSX.utils.json_to_sheet(typeRows3);
+    ws4['!cols']=[{wch:12},{wch:10},{wch:10},{wch:10}];
+    XLSX.utils.book_append_sheet(wb, ws4, 'Type Summary');
+  }
+
+  const label = scope==='month' && activeMonth ? monthLabel(activeMonth) : 'AllData';
+  const fname = `GKD_Spoilage_${label.replace(' ','_')}_${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, fname);
+  showToast(`✅ Excel exported: ${fname}`);
+}
+
+function exportCSV(scope) {
+  if (!DATA.length) { showToast('⚠️ No data to export!', '#e53e3e'); return; }
+  const rows = scope === 'month' ? getMonthData() : getFilteredData();
+  if (!rows.length) { showToast('⚠️ No data found!', '#e53e3e'); return; }
+
+  const headers = ['DATE','CAN NO','CENTRE NAME','LINE','SHIFT','SUPERVISOR','TYPE','CENTRE TYPE','QTY (L)'];
+  const csvRows = [headers.join(',')];
+  rows.forEach(r => {
+    csvRows.push([r.DATE, r.CANNO, `"${r.CENTRE}"`, r.LINE, r.SHIFT, r.SUPERVISOR, r.TYPE, r.CTYPE, r.QTY].join(','));
+  });
+  const blob = new Blob([csvRows.join('\n')], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const label = scope==='month' && activeMonth ? monthLabel(activeMonth).replace(' ','_') : 'AllData';
+  a.download = `GKD_Spoilage_${label}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  showToast('✅ CSV downloaded!');
+}
+
+function printTable() {
+  if (!DATA.length) { showToast('⚠️ No data!','#e53e3e'); return; }
+  const rows = getFilteredData();
+  const html = buildPrintHTML(
+    `GKD Spoilage Report — ${activeFilter === 'All' ? 'All Types' : activeFilter}`,
+    `Total: ${rows.length} records | Qty: ${rows.reduce((a,r)=>a+r.QTY,0).toFixed(1)} L`,
+    `<table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead style="background:#0f4c81;color:#fff;">
+        <tr><th>DATE</th><th>CAN NO</th><th>CENTRE</th><th>LINE</th><th>SHIFT</th><th>SUPERVISOR</th><th>TYPE</th><th>QTY (L)</th></tr>
+      </thead>
+      <tbody>
+        ${rows.map((r,i)=>`<tr style="background:${i%2===0?'#f8fafc':'#fff'}">
+          <td>${r.DATE}</td><td>${r.CANNO}</td><td>${r.CENTRE}</td><td>${r.LINE}</td>
+          <td>${r.SHIFT}</td><td>${r.SUPERVISOR}</td><td>${r.TYPE}</td><td style="text-align:right;font-weight:bold">${r.QTY}</td>
+        </tr>`).join('')}
+        <tr style="background:#0f4c81;color:#fff;font-weight:bold">
+          <td colspan="7">TOTAL</td><td style="text-align:right">${rows.reduce((a,r)=>a+r.QTY,0).toFixed(1)}</td>
+        </tr>
+      </tbody>
+    </table>`
+  );
+  openPrint(html);
+}
+
+function printMonth() {
+  if (!DATA.length || !activeMonth) { showToast('⚠️ Select a month first!','#e53e3e'); return; }
+  const mData = getMonthData();
+  const total = mData.reduce((a,r)=>a+r.QTY,0);
+
+  const supMap = groupBy(mData, r=>r.SUPERVISOR);
+  const supRows = Object.entries(supMap).map(([s,rs])=>({name:s,qty:rs.reduce((a,r)=>a+r.QTY,0),cnt:rs.length})).sort((a,b)=>b.qty-a.qty);
+
+  const cenMap = groupBy(mData, r=>r.CENTRE);
+  const cenRows = Object.entries(cenMap).map(([c,rs])=>({name:c,qty:rs.reduce((a,r)=>a+r.QTY,0)})).sort((a,b)=>b.qty-a.qty);
+
+  const html = buildPrintHTML(
+    `GKD Monthly Spoilage Report — ${monthLabel(activeMonth)}`,
+    `Total Records: ${mData.length} | Total Qty: ${total.toFixed(1)} L | Active Days: ${[...new Set(mData.map(r=>r.DATE))].length}`,
+    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+      <div>
+        <h3 style="color:#0f4c81;margin-bottom:8px;font-size:14px;">SUPERVISOR WISE</h3>
+        <table border="1" cellpadding="5" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead style="background:#0f4c81;color:#fff;"><tr><th>SUPERVISOR</th><th>QTY (L)</th><th>ENTRIES</th></tr></thead>
+          <tbody>
+            ${supRows.map((s,i)=>`<tr style="background:${i%2===0?'#f8fafc':'#fff'}"><td>${s.name}</td><td style="text-align:right;font-weight:bold">${s.qty.toFixed(1)}</td><td style="text-align:center">${s.cnt}</td></tr>`).join('')}
+            <tr style="background:#0f4c81;color:#fff;font-weight:bold"><td>TOTAL</td><td style="text-align:right">${total.toFixed(1)}</td><td style="text-align:center">${mData.length}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h3 style="color:#0f4c81;margin-bottom:8px;font-size:14px;">CENTRE WISE (Top 15)</h3>
+        <table border="1" cellpadding="5" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead style="background:#0f4c81;color:#fff;"><tr><th>CENTRE</th><th>QTY (L)</th></tr></thead>
+          <tbody>
+            ${cenRows.slice(0,15).map((c,i)=>`<tr style="background:${i%2===0?'#f8fafc':'#fff'}"><td>${c.name}</td><td style="text-align:right;font-weight:bold">${c.qty.toFixed(1)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <h3 style="color:#0f4c81;margin-bottom:8px;font-size:14px;">ALL ENTRIES</h3>
+    <table border="1" cellpadding="5" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead style="background:#0f4c81;color:#fff;"><tr><th>DATE</th><th>CAN NO</th><th>CENTRE</th><th>LINE</th><th>SHIFT</th><th>SUPERVISOR</th><th>TYPE</th><th>QTY (L)</th></tr></thead>
+      <tbody>
+        ${mData.map((r,i)=>`<tr style="background:${i%2===0?'#f8fafc':'#fff'}"><td>${r.DATE}</td><td>${r.CANNO}</td><td>${r.CENTRE}</td><td>${r.LINE}</td><td>${r.SHIFT}</td><td>${r.SUPERVISOR}</td><td>${r.TYPE}</td><td style="text-align:right;font-weight:bold">${r.QTY}</td></tr>`).join('')}
+        <tr style="background:#0f4c81;color:#fff;font-weight:bold"><td colspan="7">TOTAL</td><td style="text-align:right">${total.toFixed(1)}</td></tr>
+      </tbody>
+    </table>`
+  );
+  openPrint(html);
+}
+
+function buildPrintHTML(title, subtitle, body) {
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>${title}</title>
+  <style>
+    body{font-family:Arial,sans-serif;padding:20px;color:#1a202c;}
+    h1{font-size:18px;color:#0f4c81;margin-bottom:4px;}
+    .meta{font-size:12px;color:#718096;margin-bottom:16px;}
+    .footer{margin-top:16px;font-size:11px;color:#718096;text-align:right;}
+    @media print{body{padding:10px;}}
+  </style></head>
+  <body>
+    <h1>🥛 ${title}</h1>
+    <div class="meta">${subtitle} &nbsp;|&nbsp; Printed: ${new Date().toLocaleString('en-IN')}</div>
+    ${body}
+    <div class="footer">G.K. Dairy — Kumbakonam | GKD Spoilage Tracker</div>
+  </body></html>`;
+}
+
+function openPrint(html) {
+  const w = window.open('','_blank','width=1000,height=700');
+  w.document.write(html);
+  w.document.close();
+  w.onload = () => { w.print(); };
 }
 
 // Init
