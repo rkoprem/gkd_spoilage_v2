@@ -158,6 +158,70 @@ header .sub { font-size:12px; color:rgba(255,255,255,0.6); font-family:'Space Mo
 .btn-csv  { background:#0f4c81; color:#fff; }
 .btn-print { background:#4a5568; color:#fff; }
 
+/* SYNC STATUS */
+.sync-bar {
+  display:flex; align-items:center; gap:10px;
+  background:#f0fff4; border:1px solid #9ae6b4;
+  border-radius:10px; padding:10px 16px; margin-bottom:14px;
+  font-size:13px; color:#276749;
+}
+.sync-bar.error { background:#fff5f5; border-color:#fc8181; color:#c53030; }
+.sync-bar.warning { background:#fffbeb; border-color:#f6ad55; color:#744210; }
+.sync-dot { width:9px; height:9px; border-radius:50%; background:#38a169; flex-shrink:0; animation: pulse 2s infinite; }
+.sync-dot.off { background:#a0aec0; animation:none; }
+.sync-dot.err { background:#e53e3e; animation:none; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.btn-sync { margin-left:auto; background:#0f4c81; color:#fff; border:none; border-radius:8px; padding:6px 14px; font-family:'Barlow Condensed'; font-size:15px; font-weight:700; cursor:pointer; white-space:nowrap; }
+.btn-sync:disabled { opacity:0.5; cursor:not-allowed; }
+
+/* SHEETS CONFIG */
+.config-box { background:#ebf8ff; border:1px solid #90cdf4; border-radius:12px; padding:18px; margin-bottom:16px; }
+.config-box h4 { font-family:'Barlow Condensed'; font-size:16px; font-weight:700; color:#2b6cb0; margin-bottom:12px; }
+.config-row { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
+.config-inp { flex:1; min-width:200px; border:1px solid #90cdf4; border-radius:8px; padding:8px 12px; font-size:14px; font-family:'Barlow'; outline:none; background:#fff; }
+.config-inp:focus { border-color:#0f4c81; }
+.btn-connect { background:#0f4c81; color:#fff; border:none; border-radius:8px; padding:9px 18px; font-family:'Barlow Condensed'; font-size:15px; font-weight:700; cursor:pointer; white-space:nowrap; }
+.step-list { counter-reset:steps; list-style:none; padding:0; }
+.step-list li { counter-increment:steps; display:flex; gap:10px; margin-bottom:10px; font-size:13px; color:#4a5568; }
+.step-list li::before { content:counter(steps); background:#0f4c81; color:#fff; border-radius:50%; width:22px; height:22px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; flex-shrink:0; margin-top:1px; }
+
+/* BACKUP MODAL */
+.modal-overlay {
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
+  z-index:500; align-items:center; justify-content:center;
+}
+.modal-overlay.open { display:flex; }
+.modal-box {
+  background:#fff; border-radius:16px; padding:28px; width:90%; max-width:480px;
+  box-shadow:0 20px 60px rgba(0,0,0,0.2);
+}
+.modal-title { font-family:'Barlow Condensed'; font-size:20px; font-weight:800; color:#0f4c81; margin-bottom:6px; }
+.modal-sub { font-size:13px; color:#718096; margin-bottom:20px; }
+.modal-section { margin-bottom:18px; }
+.modal-section label { display:block; font-size:12px; color:#718096; font-family:'Space Mono'; letter-spacing:1px; margin-bottom:6px; }
+.modal-section input { width:100%; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px; font-size:15px; font-family:'Barlow'; outline:none; }
+.modal-section input:focus { border-color:#0f4c81; }
+.modal-actions { display:flex; gap:10px; flex-wrap:wrap; }
+.btn-modal { flex:1; min-width:120px; padding:10px 16px; border:none; border-radius:8px; font-family:'Barlow Condensed'; font-size:16px; font-weight:700; cursor:pointer; transition:all 0.2s; }
+.btn-modal:hover { opacity:0.85; }
+.btn-dl { background:#1d6f42; color:#fff; }
+.btn-restore { background:#0f4c81; color:#fff; }
+.btn-close-modal { background:#e2e8f0; color:#4a5568; }
+
+/* BACKUP STATUS BAR */
+.backup-bar {
+  background:#ebf8ff; border:1px solid #90cdf4; border-radius:10px;
+  padding:10px 16px; display:flex; align-items:center; gap:12px;
+  font-size:13px; color:#2b6cb0; margin-bottom:14px;
+}
+.backup-bar .b-icon { font-size:18px; }
+.backup-bar .b-info { flex:1; }
+.btn-backup-open {
+  background:#0f4c81; color:#fff; border:none; border-radius:8px;
+  padding:7px 16px; font-family:'Barlow Condensed'; font-size:15px;
+  font-weight:700; cursor:pointer; white-space:nowrap;
+}
+
 .tbl-wrap { overflow-x:auto; }
 
 /* UPLOAD STATUS */
@@ -212,7 +276,10 @@ header .sub { font-size:12px; color:rgba(255,255,255,0.6); font-family:'Space Mo
           <div class="status-name" id="status-filename">—</div>
           <div class="status-meta" id="status-meta">—</div>
         </div>
-        <button class="btn-clear-data" onclick="clearAllData()">🗑 Clear All Data</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-backup-open" onclick="openBackupModal()">🔐 Backup / Restore</button>
+          <button class="btn-clear-data" onclick="clearAllData()">🗑 Clear All Data</button>
+        </div>
       </div>
     </div>
 
@@ -225,6 +292,15 @@ header .sub { font-size:12px; color:rgba(255,255,255,0.6); font-family:'Space Mo
         <button class="btn-sm btn-merge" onclick="confirmUpload('merge')">➕ Merge</button>
         <button class="btn-sm btn-cancel" onclick="cancelUpload()">✕ Cancel</button>
       </div>
+    </div>
+
+    <div class="backup-bar" id="backup-status-bar" style="display:none;">
+      <span class="b-icon">💾</span>
+      <div class="b-info">
+        <strong id="bbar-info">—</strong><br>
+        <span id="bbar-meta" style="font-size:12px;opacity:0.8;"></span>
+      </div>
+      <button class="btn-backup-open" onclick="openBackupModal()">🔐 Backup / Restore</button>
     </div>
 
     <div class="upload-zone" id="dropZone">
@@ -247,6 +323,7 @@ header .sub { font-size:12px; color:rgba(255,255,255,0.6); font-family:'Space Mo
     <button class="tab-btn" onclick="switchTab('predict',this)">🔮 AI Predict</button>
     <button class="tab-btn" onclick="switchTab('addentry',this)">➕ Add Entry</button>
     <button class="tab-btn" onclick="switchTab('alldata',this)">📋 All Data</button>
+    <button class="tab-btn" onclick="switchTab('sheetsync',this)">☁️ Sheets Sync</button>
   </div>
 
   <!-- DASHBOARD -->
@@ -385,6 +462,108 @@ header .sub { font-size:12px; color:rgba(255,255,255,0.6); font-family:'Space Mo
     </div>
   </div>
 
+  <!-- SHEETS SYNC TAB -->
+  <div class="tab-pane" id="tab-sheetsync">
+
+    <!-- Setup config -->
+    <div class="config-box" id="sheets-setup-box">
+      <h4>☁️ Google Sheets இணைக்கணும் — One-time Setup</h4>
+      <ol class="step-list">
+        <li>Google Sheet திறந்து <strong>Extensions → Apps Script</strong> போங்க</li>
+        <li>கொடுத்த <strong>GKD_Spoilage_AppScript.gs</strong> code paste பண்ணுங்க</li>
+        <li><strong>Deploy → New deployment → Web App</strong> → Execute as: Me → Anyone → Deploy</li>
+        <li>கிடைக்கிற Web App URL இங்க paste பண்ணுங்க:</li>
+      </ol>
+      <div class="config-row" style="margin-top:12px;">
+        <input class="config-inp" id="sheet-url-inp" type="url" placeholder="https://script.google.com/macros/s/...../exec">
+        <button class="btn-connect" onclick="connectSheets()">🔗 Connect</button>
+      </div>
+      <div id="connect-status" style="margin-top:10px;font-size:13px;"></div>
+    </div>
+
+    <!-- Sync controls (shown after connected) -->
+    <div id="sheets-connected-box" style="display:none;">
+      <div class="sync-bar" id="main-sync-bar">
+        <div class="sync-dot" id="sync-dot"></div>
+        <div id="sync-bar-text" style="flex:1;">Checking connection...</div>
+        <button class="btn-sync" id="sync-btn" onclick="syncNow()">🔄 Sync Now</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:18px;">
+        <div class="card" style="margin-bottom:0;text-align:center;">
+          <div style="font-size:11px;color:var(--muted);font-family:'Space Mono';margin-bottom:6px;">LOCAL RECORDS</div>
+          <div style="font-family:'Barlow Condensed';font-size:32px;font-weight:800;color:#0f4c81;" id="local-count">0</div>
+          <div style="font-size:12px;color:var(--muted);">In this device</div>
+        </div>
+        <div class="card" style="margin-bottom:0;text-align:center;">
+          <div style="font-size:11px;color:var(--muted);font-family:'Space Mono';margin-bottom:6px;">SHEET RECORDS</div>
+          <div style="font-family:'Barlow Condensed';font-size:32px;font-weight:800;color:#38a169;" id="sheet-count">—</div>
+          <div style="font-size:12px;color:var(--muted);">In Google Sheets</div>
+        </div>
+        <div class="card" style="margin-bottom:0;text-align:center;">
+          <div style="font-size:11px;color:var(--muted);font-family:'Space Mono';margin-bottom:6px;">LAST SYNCED</div>
+          <div style="font-family:'Barlow Condensed';font-size:16px;font-weight:700;color:#dd6b20;margin-top:8px;" id="last-sync-time">Never</div>
+          <div style="font-size:12px;color:var(--muted);">Auto-sync: on upload</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-title">🔄 SYNC ACTIONS</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn-export btn-xlsx" style="font-size:14px;" onclick="pushToSheets()">⬆️ Push Local → Sheets</button>
+          <button class="btn-export btn-csv" style="font-size:14px;" onclick="pullFromSheets()">⬇️ Pull Sheets → Local</button>
+          <button class="btn-export" style="background:#dd6b20;color:#fff;font-size:14px;" onclick="syncNow()">↕️ Full Sync (Both ways)</button>
+        </div>
+        <div style="margin-top:12px;font-size:13px;color:var(--muted);">
+          ⬆️ Push — உங்க local data-வை Sheet-ல add பண்ணும் (duplicate skip)<br>
+          ⬇️ Pull — Sheet-ல இருக்க data உங்க device-ல load ஆகும்<br>
+          ↕️ Full Sync — இரண்டையும் merge பண்ணும்
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📋 SYNC LOG</div>
+        <div id="sync-log" style="font-family:'Space Mono';font-size:12px;color:#4a5568;max-height:200px;overflow-y:auto;line-height:1.8;"></div>
+      </div>
+
+      <div style="margin-top:12px;text-align:right;">
+        <button onclick="disconnectSheets()" style="background:none;border:none;color:#a0aec0;font-size:12px;cursor:pointer;text-decoration:underline;">Disconnect Sheets</button>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- BACKUP MODAL -->
+<div class="modal-overlay" id="backup-modal">
+  <div class="modal-box">
+    <div class="modal-title">🔐 Backup & Restore</div>
+    <div class="modal-sub">Data-ஐ secure-ஆ backup பண்ணி, எந்த device-லயும் restore பண்ணலாம்.</div>
+
+    <div class="modal-section">
+      <label>BACKUP PASSWORD (Set a password to protect)</label>
+      <input type="password" id="backup-pwd" placeholder="உங்க password type பண்ணுங்க">
+    </div>
+
+    <div class="modal-section" style="background:#f0fff4;border:1px solid #9ae6b4;border-radius:10px;padding:14px;">
+      <div style="font-family:'Barlow Condensed';font-weight:700;color:#276749;margin-bottom:8px;">📥 DOWNLOAD BACKUP</div>
+      <div style="font-size:13px;color:#276749;margin-bottom:12px;">Password enter பண்ணி backup file download பண்ணுங்க. இந்த file safe-ஆ வேற device-ல upload பண்ணலாம்.</div>
+      <button class="btn-modal btn-dl" onclick="downloadBackup()" style="min-width:unset;width:100%;">💾 Download Backup File</button>
+    </div>
+
+    <div style="height:14px;"></div>
+
+    <div class="modal-section" style="background:#ebf8ff;border:1px solid #90cdf4;border-radius:10px;padding:14px;">
+      <div style="font-family:'Barlow Condensed';font-weight:700;color:#2b6cb0;margin-bottom:8px;">📤 RESTORE FROM BACKUP</div>
+      <div style="font-size:13px;color:#2b6cb0;margin-bottom:10px;">Backup file select பண்ணி password enter பண்ணா data restore ஆகும்.</div>
+      <input type="file" id="restore-file" accept=".gkdbak,.json" style="margin-bottom:10px;">
+      <button class="btn-modal btn-restore" onclick="restoreBackup()" style="min-width:unset;width:100%;">🔄 Restore Data</button>
+    </div>
+
+    <div style="height:14px;"></div>
+    <button class="btn-modal btn-close-modal" onclick="closeBackupModal()" style="width:100%;">✕ Close</button>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -436,6 +615,7 @@ function loadFromStorage() {
     document.getElementById('rec-count').textContent = DATA.length+' Records';
     refreshAll();
     showToast('\ud83d\udcbe '+DATA.length+' records restored!');
+    initBackupBar();
   } catch(e) { /* silent */ }
 }
 
@@ -608,6 +788,7 @@ function loadData(rows, filename, mode) {
   if (mode === 'replace') showToast(`✅ ${DATA.length} records loaded!`);
 
   saveToStorage();
+  autoSyncIfConnected();
   refreshAll();
 }
 
@@ -950,7 +1131,8 @@ function addManualEntry() {
   document.getElementById('inp-centre').value='';
   document.getElementById('inp-qty').value='';
   saveToStorage();
-  showToast('✅ Entry added!');
+  autoSyncIfConnected();
+  showToast('✅ Entry added! Auto-syncing...');
   refreshAll();
 }
 
@@ -1190,9 +1372,315 @@ function openPrint(html) {
   w.onload = () => { w.print(); };
 }
 
+// ===== GOOGLE SHEETS SYNC =====
+const GS_URL_KEY = 'gkd_sheets_url';
+const GS_SYNC_KEY = 'gkd_last_sync';
+let sheetsUrl = '';
+let isSyncing = false;
+
+function connectSheets() {
+  const url = document.getElementById('sheet-url-inp').value.trim();
+  if (!url.includes('script.google.com')) {
+    document.getElementById('connect-status').innerHTML = '<span style="color:#e53e3e">⚠️ Valid Apps Script URL இல்ல. script.google.com/macros/s/.../exec format-ல இருக்கணும்.</span>';
+    return;
+  }
+  document.getElementById('connect-status').innerHTML = '<span style="color:#dd6b20">🔄 Testing connection...</span>';
+  
+  fetch(url + '?action=getAll')
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) throw new Error(data.error);
+      sheetsUrl = url;
+      localStorage.setItem(GS_URL_KEY, url);
+      document.getElementById('connect-status').innerHTML = '<span style="color:#38a169">✅ Connected! Sheet-ல ' + (data.count||0) + ' records இருக்கு.</span>';
+      showSheetsConnected();
+      updateSyncCounts(data.count || 0);
+      addSyncLog('✅ Connected to Google Sheets');
+    })
+    .catch(err => {
+      document.getElementById('connect-status').innerHTML = '<span style="color:#e53e3e">❌ Connection failed: ' + err.message + '. CORS error இருந்தா Deploy settings check பண்ணுங்க (Anyone access).</span>';
+    });
+}
+
+function showSheetsConnected() {
+  document.getElementById('sheets-setup-box').style.display = 'none';
+  document.getElementById('sheets-connected-box').style.display = 'block';
+  updateLocalCount();
+  const lastSync = localStorage.getItem(GS_SYNC_KEY);
+  if (lastSync) document.getElementById('last-sync-time').textContent = lastSync;
+  setSyncStatus('connected', '☁️ Connected to Google Sheets');
+}
+
+function setSyncStatus(state, msg) {
+  const bar = document.getElementById('main-sync-bar');
+  const dot = document.getElementById('sync-dot');
+  bar.className = 'sync-bar' + (state==='error'?' error':state==='warning'?' warning':'');
+  dot.className = 'sync-dot' + (state==='error'?' err':state==='off'?' off':'');
+  document.getElementById('sync-bar-text').textContent = msg;
+}
+
+function updateLocalCount() {
+  document.getElementById('local-count').textContent = DATA.length;
+}
+
+function updateSyncCounts(sheetCount) {
+  document.getElementById('sheet-count').textContent = sheetCount;
+  updateLocalCount();
+}
+
+function addSyncLog(msg) {
+  const log = document.getElementById('sync-log');
+  if (!log) return;
+  const time = new Date().toLocaleTimeString('en-IN');
+  log.innerHTML = '<div>[' + time + '] ' + msg + '</div>' + log.innerHTML;
+}
+
+async function pushToSheets() {
+  if (!sheetsUrl) { showToast('⚠️ Sheets connect பண்ணுங்க!', '#e53e3e'); return; }
+  if (!DATA.length) { showToast('⚠️ No local data!', '#e53e3e'); return; }
+  if (isSyncing) return;
+  isSyncing = true;
+  setSyncStatus('syncing', '⬆️ Pushing to Sheets...');
+  document.getElementById('sync-btn').disabled = true;
+
+  const records = DATA.map(r => ({
+    'DATE': r.DATE, 'CAN NO': r.CANNO, 'CENTRE NAME': r.CENTRE,
+    'LINE': r.LINE, 'SHIFT': r.SHIFT, 'SUPERVISOR': r.SUPERVISOR,
+    'TYPE': r.TYPE, 'CENTRE TYPE': r.CTYPE, 'QTY': r.QTY
+  }));
+
+  try {
+    const res = await fetch(sheetsUrl, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'sync', records })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    const now = new Date().toLocaleString('en-IN');
+    localStorage.setItem(GS_SYNC_KEY, now);
+    document.getElementById('last-sync-time').textContent = now;
+    updateSyncCounts(data.total);
+    setSyncStatus('connected', '✅ Push complete — ' + data.added + ' new, ' + data.skipped + ' skipped');
+    addSyncLog('⬆️ Push: ' + data.added + ' added, ' + data.skipped + ' skipped');
+    showToast('✅ Sheet-ல ' + data.added + ' records pushed!');
+  } catch(e) {
+    setSyncStatus('error', '❌ Push failed: ' + e.message);
+    addSyncLog('❌ Push error: ' + e.message);
+  }
+  isSyncing = false;
+  document.getElementById('sync-btn').disabled = false;
+}
+
+async function pullFromSheets() {
+  if (!sheetsUrl) { showToast('⚠️ Sheets connect பண்ணுங்க!', '#e53e3e'); return; }
+  if (isSyncing) return;
+  isSyncing = true;
+  setSyncStatus('syncing', '⬇️ Pulling from Sheets...');
+  document.getElementById('sync-btn').disabled = true;
+
+  try {
+    const res = await fetch(sheetsUrl + '?action=getAll');
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const sheetRecords = (data.records || []).map(r => ({
+      DATE: r['DATE'], CANNO: r['CAN NO'], CENTRE: r['CENTRE NAME'],
+      LINE: r['LINE'], SHIFT: r['SHIFT'], SUPERVISOR: r['SUPERVISOR'],
+      TYPE: r['TYPE'], CTYPE: r['CENTRE TYPE'], QTY: parseFloat(r['QTY']) || 0,
+      _dt: parseDate(String(r['DATE'])), _row: r._row
+    })).filter(r => r._dt && !isNaN(r._dt) && r.QTY > 0);
+
+    // Merge — never delete local
+    const existing = new Set(DATA.map(r => r.DATE+'-'+r.CANNO+'-'+r.QTY));
+    const newRecs = sheetRecords.filter(r => !existing.has(r.DATE+'-'+r.CANNO+'-'+r.QTY));
+    DATA = [...DATA, ...newRecs];
+    DATA.sort((a,b) => b._dt - a._dt);
+    saveToStorage();
+    refreshAll();
+
+    const now = new Date().toLocaleString('en-IN');
+    localStorage.setItem(GS_SYNC_KEY, now);
+    document.getElementById('last-sync-time').textContent = now;
+    updateSyncCounts(data.count);
+    setSyncStatus('connected', '✅ Pull complete — ' + newRecs.length + ' new records');
+    addSyncLog('⬇️ Pull: ' + newRecs.length + ' new records from Sheets');
+    showToast('✅ ' + newRecs.length + ' new records pulled from Sheet!');
+  } catch(e) {
+    setSyncStatus('error', '❌ Pull failed: ' + e.message);
+    addSyncLog('❌ Pull error: ' + e.message);
+  }
+  isSyncing = false;
+  document.getElementById('sync-btn').disabled = false;
+}
+
+async function syncNow() {
+  await pushToSheets();
+  await pullFromSheets();
+}
+
+function disconnectSheets() {
+  if (!confirm('Sheets disconnect பண்ணணும்னா confirm பண்ணுங்க. Local data safe-ஆ இருக்கும்.')) return;
+  sheetsUrl = '';
+  localStorage.removeItem(GS_URL_KEY);
+  document.getElementById('sheets-setup-box').style.display = 'block';
+  document.getElementById('sheets-connected-box').style.display = 'none';
+  addSyncLog('🔌 Disconnected from Sheets');
+}
+
+function initSheets() {
+  const saved = localStorage.getItem(GS_URL_KEY);
+  if (saved) {
+    sheetsUrl = saved;
+    document.getElementById('sheet-url-inp').value = saved;
+    showSheetsConnected();
+    // Auto-pull on load (silent)
+    fetch(saved + '?action=getAll')
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) { setSyncStatus('warning', '⚠️ Sheet reachable இல்ல — offline mode'); return; }
+        updateSyncCounts(data.count || 0);
+        setSyncStatus('connected', '☁️ Connected — ' + (data.count||0) + ' records in Sheet');
+        addSyncLog('🔁 Auto-checked Sheets on load');
+      })
+      .catch(() => setSyncStatus('warning', '⚠️ Offline — local data use பண்றோம்'));
+  }
+}
+
+// Auto-push after every add/upload
+function autoSyncIfConnected() {
+  if (sheetsUrl && DATA.length) {
+    setTimeout(() => pushToSheets(), 500);
+  }
+}
+
+// ===== BACKUP / RESTORE =====
+const BACKUP_VERSION = 'GKD_BACKUP_V1';
+
+function openBackupModal() {
+  document.getElementById('backup-modal').classList.add('open');
+  document.getElementById('backup-pwd').value = '';
+}
+function closeBackupModal() {
+  document.getElementById('backup-modal').classList.remove('open');
+}
+
+// Simple XOR-based obfuscation (lightweight, not crypto-grade but prevents casual access)
+function xorEncode(str, key) {
+  let result = '';
+  for (let i = 0; i < str.length; i++) {
+    result += String.fromCharCode(str.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+  }
+  return btoa(unescape(encodeURIComponent(result)));
+}
+
+function xorDecode(b64, key) {
+  try {
+    const str = decodeURIComponent(escape(atob(b64)));
+    let result = '';
+    for (let i = 0; i < str.length; i++) {
+      result += String.fromCharCode(str.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+    }
+    return result;
+  } catch(e) { return null; }
+}
+
+function downloadBackup() {
+  if (!DATA.length) { showToast('⚠️ No data to backup!','#e53e3e'); return; }
+  const pwd = document.getElementById('backup-pwd').value.trim();
+  if (!pwd) { showToast('⚠️ Password enter பண்ணுங்க!','#e53e3e'); return; }
+
+  const payload = {
+    version: BACKUP_VERSION,
+    created: new Date().toISOString(),
+    createdLabel: new Date().toLocaleString('en-IN'),
+    count: DATA.length,
+    records: DATA.map(r => ({
+      DATE:r.DATE, CANNO:r.CANNO, CENTRE:r.CENTRE,
+      LINE:r.LINE, SHIFT:r.SHIFT, SUPERVISOR:r.SUPERVISOR,
+      TYPE:r.TYPE, CTYPE:r.CTYPE, QTY:r.QTY
+    }))
+  };
+
+  const encoded = xorEncode(JSON.stringify(payload), pwd);
+  const wrapper = JSON.stringify({ gkd: true, v: 1, data: encoded });
+
+  const blob = new Blob([wrapper], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const ts = new Date().toISOString().slice(0,10);
+  a.download = `GKD_Backup_${ts}.gkdbak`;
+  a.click();
+
+  // Update backup bar
+  updateBackupBar(DATA.length, new Date().toLocaleString('en-IN'));
+  localStorage.setItem('gkd_last_backup', JSON.stringify({count:DATA.length, when:new Date().toLocaleString('en-IN')}));
+
+  showToast('✅ Backup downloaded! Safe-ஆ store பண்ணுங்க.');
+  closeBackupModal();
+}
+
+function restoreBackup() {
+  const fileInp = document.getElementById('restore-file');
+  const pwd = document.getElementById('backup-pwd').value.trim();
+  if (!fileInp.files[0]) { showToast('⚠️ Backup file select பண்ணுங்க!','#e53e3e'); return; }
+  if (!pwd) { showToast('⚠️ Password enter பண்ணுங்க!','#e53e3e'); return; }
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wrapper = JSON.parse(e.target.result);
+      if (!wrapper.gkd) { showToast('⚠️ Invalid backup file!','#e53e3e'); return; }
+      const decoded = xorDecode(wrapper.data, pwd);
+      if (!decoded) { showToast('⚠️ Wrong password!','#e53e3e'); return; }
+      const payload = JSON.parse(decoded);
+      if (payload.version !== BACKUP_VERSION) { showToast('⚠️ Incompatible backup version!','#e53e3e'); return; }
+
+      const restored = payload.records.map(r=>({...r, _dt:parseDate(r.DATE)})).filter(r=>r._dt&&!isNaN(r._dt));
+      if (!restored.length) { showToast('⚠️ No valid records in backup!','#e53e3e'); return; }
+
+      // MERGE with existing (never delete existing — only add new)
+      const existing = new Set(DATA.map(r=>`${r.DATE}-${r.CANNO}-${r.QTY}`));
+      const newRecs = restored.filter(r=>!existing.has(`${r.DATE}-${r.CANNO}-${r.QTY}`));
+      DATA = [...DATA, ...newRecs];
+      DATA.sort((a,b)=>b._dt-a._dt);
+
+      saveToStorage();
+      document.getElementById('upload-status-box').style.display='block';
+      document.getElementById('status-filename').textContent='Restored: '+fileInp.files[0].name;
+      document.getElementById('status-meta').textContent=DATA.length+' records • Backup from: '+payload.createdLabel;
+      document.getElementById('rec-count').textContent=DATA.length+' Records';
+      refreshAll();
+      showToast('✅ '+restored.length+' records restored! ('+newRecs.length+' new added)');
+      closeBackupModal();
+    } catch(ex) {
+      showToast('⚠️ Restore failed — wrong password or corrupt file!','#e53e3e');
+    }
+  };
+  reader.readAsText(fileInp.files[0]);
+}
+
+function updateBackupBar(count, when) {
+  document.getElementById('backup-status-bar').style.display='flex';
+  document.getElementById('bbar-info').textContent='Last backup: '+when;
+  document.getElementById('bbar-meta').textContent=count+' records backed up • .gkdbak file-ஐ safe-ஆ வைங்க';
+}
+
+// Restore backup bar state on load
+function initBackupBar() {
+  try {
+    const b = localStorage.getItem('gkd_last_backup');
+    if (b) {
+      const {count,when} = JSON.parse(b);
+      updateBackupBar(count, when);
+    }
+  } catch(e) {}
+}
+
 // Init
 document.getElementById('inp-date').value = new Date().toISOString().split('T')[0];
 loadFromStorage();
+initBackupBar();
+initSheets();
 </script>
 </body>
 </html>
